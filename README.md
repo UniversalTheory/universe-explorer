@@ -110,6 +110,13 @@ public/data                   baked ephemeris (generated)
 public/textures               textures (generated / processed)
 ```
 
+## Documentation
+
+`CLAUDE.md` is the entry point for contributors (human or AI). `docs/ARCHITECTURE.md` explains the
+frames, ephemeris, rendering and event engine; `docs/DECISIONS.md` records every decision and why;
+`docs/STATUS.md` lists what exists, known issues and the backlog; `docs/DEV-WORKFLOW.md` covers testing,
+data refresh and how to add bodies or textures.
+
 ## Roadmap
 
 - Serverless proxy for live JPL Horizons data (fresh TLEs, more small bodies on demand)
