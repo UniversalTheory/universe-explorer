@@ -2,6 +2,7 @@
 # Downloads free textures into public/textures.
 #  - Solar System Scope textures: CC BY 4.0 (https://www.solarsystemscope.com/textures/)
 #  - ESO Milky Way panorama (Serge Brunier): CC BY 4.0 (https://www.eso.org/public/images/eso0932a/)
+#  - Milky Way top-down artist's impression (NASA/JPL-Caltech/ESO/R. Hurt): CC BY 4.0 (https://www.eso.org/public/images/eso1339g/)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=public/textures
@@ -36,3 +37,6 @@ done
 fetch "https://cdn.eso.org/images/large/eso0932a.jpg" "$OUT/eso_milky_way.jpg"
 
 echo "done"
+
+# Top-down Milky Way artwork for the optional map plane (1024 px "screen" size, 200 KB).
+fetch "https://cdn.eso.org/images/screen/eso1339g.jpg" "$OUT/eso1339g_milky_way_map.jpg"

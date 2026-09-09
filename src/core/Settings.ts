@@ -13,13 +13,17 @@ export interface SettingsState {
   deepSky: boolean;
   /** Black holes, neutron stars, white dwarfs. */
   compact: boolean;
+  /** Galaxy model (disc, bar, arms), the artwork map plane, and schematic structures (heliopause, Oort cloud, Local Bubble…). */
+  galaxy: boolean;
+  galaxyMap: boolean;
+  structures: boolean;
   /** Load the on-demand deep star tier (AT-HYG, ~9 MB) when leaving the Solar System. */
   deepStars: boolean;
   quality: 'auto' | 'high' | 'low';
 }
 
 const DEFAULTS: SettingsState = {
-  scaleMode: 'visual', orbits: true, labels: true, moons: true, smallBodies: true, spacecraft: true, belts: true, stars: true, exoplanets: true, deepSky: true, compact: true, deepStars: true, quality: 'auto',
+  scaleMode: 'visual', orbits: true, labels: true, moons: true, smallBodies: true, spacecraft: true, belts: true, stars: true, exoplanets: true, deepSky: true, compact: true, galaxy: true, galaxyMap: false, structures: true, deepStars: true, quality: 'auto',
 };
 const KEY = 'universe-explorer.settings.v1';
 

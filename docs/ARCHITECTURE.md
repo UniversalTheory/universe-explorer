@@ -57,6 +57,9 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/ephemeris/binary.ts` | Visual/spectroscopic binary orbits in the sky frame (north, east, toward observer); separation / position angle; Schwarzschild radius |
 | `src/data/compact.ts` | Black holes, neutron stars, white dwarfs and their companions with masses, spins and orbital elements; S2; Alpha Cen B binding |
 | `src/render/CompactObjects.ts` | `BlackHoleObject` (shadow, photon ring, accretion disc, far glow) and `PulsarBeams` |
+| `src/data/galaxy.ts` | Galaxy parameters (R₀, Reid 2019 arms, disc/bulge/bar), Galactic-frame conversions, schematic regions and arm labels |
+| `src/render/GalaxyModel.ts` | 275k-point disc / bulge / bar / arm model in the far scene + optional artwork map plane |
+| `src/render/RegionObject.ts` | Wireframe shells, rings and curves for the heliopause, Oort cloud, Local Bubble, Gould Belt, Radcliffe Wave |
 | `src/ephemeris/orbit-elements.ts` | osculating elements from a state vector (for drawing planet/moon orbits) |
 | `src/ephemeris/Ephemeris.ts` | facade + per-frame cache; loads `public/data` |
 | `src/ephemeris/types.ts` | shape of `public/data/ephemeris.json` |
@@ -296,4 +299,34 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
   mass, event-horizon radius, spin, current separation and position angle of binary companions, flags for unmeasured
   node/phase. `scripts/dev/compact-check.ts` verifies Sirius B's separation, S2's 2018 periastron (120 AU, 7,650 km/s) and
   Alpha Cen B's 2035 periastron.
+
+## Galaxy model (Phase 2, Stage F)
+
+- **Parameters** (`src/data/galaxy.ts`): R₀ = 8.15 kpc, Θ₀ = 236 km/s and the seven arm fits of Reid et al. 2019
+  (ApJ 885, 131, Table 2: kink azimuth, kink radius, pitch angles on each side, azimuth range, width) — verified against
+  the published table; disc scale length 2.6 kpc / height 0.3 kpc, thick disc 2.0 / 0.9 kpc, Hernquist bulge a = 0.7
+  kpc, bar half-length 5 kpc at 28° (Bland-Hawthorn & Gerhard 2016); Sun 20.8 pc above the plane. Azimuth β is
+  Galactocentric, 0 toward the Sun, increasing with longitude; `galactoToEcl(R, β, z)` maps model coordinates to the
+  world frame through the Sun-centred Galactic frame (x̂ → centre, ŷ → l = 90°, ẑ → NGP) and GAL→EQJ→ECL.
+- **Model** (`GalaxyModel`, far scene): ~275k additive point sprites (halved on low quality) generated deterministically:
+  thin disc (exponential, mild warp beyond 10 kpc), thick disc, bulge, bar, and the arms as Gaussian ribbons weighted by
+  arc length with 2.5% pink H II sprites and a dimmer, redder inner (dust-lane) edge. The fits cover only the measured
+  azimuths (mostly our side of the Galaxy); each arm is extrapolated 240° further with its outer pitch angle, drawn
+  dimmer and without H II regions, so the far side is an informed guess, and brightness tapers toward the centre so the
+  bulge does not saturate. Points represent ~20 pc blobs:
+  size from that world size (1–5 px), alpha fades to zero within 0.5 kpc of the camera where the real star catalogue
+  takes over. The whole model sits in a group at the Galactic centre rotated by the Galactic-frame quaternion, so real
+  stars, nebulae and Sgr A* land in the right arms (`scripts/dev/galaxy-check.ts`: Sagittarius arm 1.28 kpc inward,
+  Perseus 1.92 kpc outward, centre within 0.1 kpc of Sgr A*).
+- **Cross-fade**: model opacity rises from 0 at 10¹⁵ km (~100 ly) from the Sun to 1 at 10¹⁶·⁵ (~1 kpc); the ESO panorama
+  fades out between 10¹³ and 10¹⁵ km. Arm labels appear once the model is ≥ 30% visible.
+- **Map plane** (setting `galaxyMap`, off by default): the NASA/JPL-Caltech/ESO/R. Hurt artwork (`eso1339g`, 1280 px,
+  CC BY 4.0) on a 34 kpc plane in the Galactic plane, image-bottom toward the Sun; scale and orientation approximate.
+- **Regions** (`REGIONS`, type `region`, `RegionObject`): heliopause (120 AU shell), Oort cloud (100,000 AU shell), Local
+  Interstellar Cloud (ellipsoid), Local Bubble (ellipsoid, Zucker 2022), Gould Belt (ring tilted 20°), Radcliffe Wave
+  (Catmull-Rom curve through nine anchors, Alves 2020), plus label-only bodies for the bar and six arms. Shells hide
+  while the camera is inside them unless selected. The info panel says "Schematic model, not a measured shape".
+- **Galactic time rates**: `RATE_STEPS` gains 100, 1,000 and 100,000 yr/s. Above `FREEZE_RATE` (20 yr/s) Solar System
+  bodies are hidden (`Universe.frozen`), the time bar says "planets hidden", and event requests stop beyond ±16,000
+  years because astronomy-engine is not valid there. Star proper motions and binary orbits keep running.
 

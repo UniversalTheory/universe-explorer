@@ -53,7 +53,12 @@ export class Clock {
 }
 
 /** Speed presets in multiples of real time. */
-export const RATE_STEPS = [1, 60, 600, 3600, 6 * 3600, 86400, 7 * 86400, 30 * 86400, 365.25 * 86400, 10 * 365.25 * 86400];
+const YEAR = 365.25 * 86400;
+/** The last three are galactic rates: proper motions and S2's orbit become visible; Solar System bodies are hidden. */
+export const RATE_STEPS = [1, 60, 600, 3600, 6 * 3600, 86400, 7 * 86400, 30 * 86400, YEAR, 10 * YEAR, 100 * YEAR, 1000 * YEAR, 100000 * YEAR];
+/** Above this rate (years per second) Solar System ephemerides are meaningless and the planets are hidden. */
+export const FREEZE_RATE = 20 * YEAR;
+export const isGalacticRate = (rate: number) => Math.abs(rate) > FREEZE_RATE;
 
 export function formatRate(rate: number): string {
   const a = Math.abs(rate);
@@ -64,5 +69,5 @@ export function formatRate(rate: number): string {
   if (a < 86400) return `${sign}${(a / 3600).toFixed(0)} h/s`;
   if (a < 30 * 86400) return `${sign}${(a / 86400).toFixed(0)} d/s`;
   if (a < 365 * 86400) return `${sign}${(a / (30 * 86400)).toFixed(0)} mo/s`;
-  return `${sign}${(a / (365.25 * 86400)).toFixed(0)} yr/s`;
+  return `${sign}${Math.round(a / YEAR).toLocaleString('en-US')} yr/s`;
 }

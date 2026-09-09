@@ -1,4 +1,4 @@
-import { Clock, RATE_STEPS, formatRate } from '@/core/Clock';
+import { Clock, RATE_STEPS, formatRate, isGalacticRate } from '@/core/Clock';
 import { fmtDateTime } from './format';
 
 const ICON = {
@@ -68,7 +68,7 @@ export class TimeBar {
     const c = this.clock;
     const text = fmtDateTime(c.ms, innerWidth < 720);
     if (text !== this.lastText) { this.dateEl.textContent = text; this.lastText = text; }
-    this.rateEl.textContent = c.live ? 'live' : c.playing ? formatRate(c.rate) : 'paused';
+    this.rateEl.textContent = c.live ? 'live' : c.playing ? formatRate(c.rate) + (isGalacticRate(c.rate) ? ' · planets hidden' : '') : 'paused';
     this.rateEl.classList.toggle('live', c.live);
     this.playBtn.innerHTML = c.playing ? ICON.pause : ICON.play;
   }

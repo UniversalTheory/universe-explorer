@@ -445,3 +445,43 @@ void main() {
 }
 `;
 
+/** Galaxy model points: each represents a ~20 pc blob; thins out near the camera where real stars take over. */
+export const GALAXY_VERT = /* glsl */ `
+attribute vec3 aColor;
+attribute float aSize;
+attribute float aAlpha;
+varying vec3 vColor;
+varying float vAlpha;
+uniform float uPixelRatio;
+uniform float uPxPerRad;
+uniform float uOpacity;
+uniform float uKpc;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vColor = aColor;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float dist = max(length(mv.xyz), 1e-6);
+  float px = (0.03 * uKpc * aSize / dist) * uPxPerRad;
+  float size = clamp(px, 1.8, 6.0);
+  float nearFade = smoothstep(0.05 * uKpc, 0.5 * uKpc, dist);
+  vAlpha = aAlpha * uOpacity * nearFade * clamp(px * 1.5, 0.6, 1.0);
+  gl_PointSize = size * uPixelRatio;
+  gl_Position = projectionMatrix * mv;
+  #include <logdepthbuf_vertex>
+}
+`;
+export const GALAXY_FRAG = /* glsl */ `
+varying vec3 vColor;
+varying float vAlpha;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  if (vAlpha <= 0.002) discard;
+  #include <logdepthbuf_fragment>
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d) * 2.0;
+  float a = smoothstep(1.0, 0.2, r) * vAlpha;
+  gl_FragColor = vec4(vColor, a);
+}
+`;
+

@@ -7,6 +7,8 @@ import { BODIES, body, registerBodies, type BodyDef } from '@/data/catalog';
 import { buildExoplanetBodies, classify, PLANET_CLASS_LABEL } from '@/data/exoplanets';
 import { buildDeepSkyBodies, DSO_KIND_LABEL } from '@/data/deepsky';
 import { buildCompactBodies } from '@/data/compact';
+import { armLabelBodies, REGIONS, R0_KPC, THETA0_KMS } from '@/data/galaxy';
+import { isGalacticRate } from '@/core/Clock';
 import { apparentSeparation, schwarzschildKm } from '@/ephemeris/binary';
 import { EXO_INCL_ASSUMED, EXO_MASS_IS_MSINI, EXO_PHASE_UNKNOWN, EXO_TRANSITS, nextTransitJd } from '@/ephemeris/exoplanets';
 import { Ephemeris } from '@/ephemeris/Ephemeris';
@@ -68,6 +70,7 @@ export class App {
     if (eph.exo) registerBodies(buildExoplanetBodies(eph.exo));
     if (eph.deepSky) registerBodies(buildDeepSkyBodies(eph.deepSky));
     registerBodies(buildCompactBodies());
+    registerBodies([...REGIONS, ...armLabelBodies()]);
     return new App(renderer, eph, starfield, quality, pr);
   }
 
@@ -198,7 +201,7 @@ export class App {
   /** Direction (world axes) from a body toward a pleasing three-quarter-lit viewpoint. */
   private litViewDir(id: string): THREE.Vector3 | undefined {
     const def = body(id);
-    if (id === 'sun' || def.type === 'star' || def.type === 'blackhole' || def.type === 'neutron') return undefined;
+    if (id === 'sun' || def.type === 'star' || def.type === 'blackhole' || def.type === 'neutron' || def.type === 'region') return undefined;
     const h = this.universe.helioOf(id) ?? this.eph.state(id, this.clock.time)?.pos;
     if (!h) return undefined;
     // Deep-sky cards are photographs taken from here: approach them from the Sun's side, slightly off-axis.
@@ -268,6 +271,7 @@ export class App {
       origin = [fromHelio[0] + (focusHelio[0] - fromHelio[0]) * s, fromHelio[1] + (focusHelio[1] - fromHelio[1]) * s, fromHelio[2] + (focusHelio[2] - fromHelio[2]) * s];
     }
     u.origin = origin;
+    u.frozen = isGalacticRate(this.clock.rate) && this.clock.playing && !this.clock.live;
     const offset = this.cam.update(dt);
     this.cam.screenShiftY = innerWidth < 720 && (this.info.visible || this.eventsPanel.visible) ? 0.26 : 0;
     this.cam.applyPose(offset, ZERO);
@@ -299,7 +303,7 @@ export class App {
       const d = this.cam.distance;
       this.topBar.setZoomView(this.cam.focusId === 'sun' ? ZOOM_VIEWS.find((v) => d >= v.min && d < v.max)?.id ?? null : null);
     }
-    if (now - this.eventsTimer > 1000) { this.eventsTimer = now; this.eventsPanel.update(this.clock.ms); this.events.request(this.clock.ms); }
+    if (now - this.eventsTimer > 1000 && Math.abs(this.clock.ms - Date.now()) < 5e14) { this.eventsTimer = now; this.eventsPanel.update(this.clock.ms); this.events.request(this.clock.ms); }
   }
 
   // --- Live facts -----------------------------------------------------------------
@@ -311,6 +315,15 @@ export class App {
     const rows: [string, string, boolean?][] = [];
     const st = this.eph.state(id, t);
     const earth = this.eph.state('earth', t);
+    if (def.type === 'region') {
+      rows.push(['Kind', 'Schematic model, not a measured shape', true]);
+      if (st && id !== 'heliopause' && id !== 'oort-cloud') rows.push(['Distance from Sun', fmtKm(vlen(st.pos)), true]);
+      rows.push(['Size', `${fmtKm(def.radius)} radius`, true]);
+      if (id.startsWith('arm-') || id === 'galactic-bar') rows.push(['Galaxy parameters', `R₀ = ${R0_KPC} kpc · Θ₀ = ${THETA0_KMS} km/s (Reid et al. 2019)`, true]);
+      for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+      this.info.setStats(rows);
+      return;
+    }
     if (def.compact) {
       const mSun = (def.mass ?? 0) / 1.9885e30;
       rows.push(['Type', def.compact === 'blackhole' ? (mSun > 1e5 ? 'Supermassive black hole' : 'Stellar-mass black hole') : def.compact === 'neutron' ? (def.spinSeconds ? (def.spinSeconds > 2 ? 'Magnetar / slow pulsar' : def.spinSeconds < 0.02 ? 'Millisecond pulsar' : 'Pulsar') : 'Neutron star') : 'White dwarf']);

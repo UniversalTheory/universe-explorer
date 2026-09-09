@@ -72,8 +72,8 @@ Stage progress (see `DECISIONS.md` P11–P14 for the scope):
 | C · Exoplanets (6,325 planets / 4,741 hosts from the NASA Exoplanet Archive, lazy systems, own-star lighting, transit-epoch phases, ~90 curated write-ups) | done 2026-09-09; `scripts/dev/exoplanets-check.ts` passes (transit geometry, Kepler consistency) |
 | D · Deep sky (90 nebulae / remnants / clusters from OpenNGC with curated distances; 49 licence-checked Commons photos (9.5 MB) on sky-plane cards in a far scene; cluster point clouds) | done 2026-09-09; `scripts/dev/deepsky-check.ts` passes; Orion, Crab, Horsehead, Eagle, Omega Centauri screenshots checked |
 | E · Compact objects (15 black holes, 11 neutron stars, 4 white dwarfs, S2; measured binary orbits for Sirius B, Procyon B, Alpha Cen B, S2; accretion-disc and pulsar-beam rendering) | done 2026-09-09; `scripts/dev/compact-check.ts` passes |
-| F · Galaxy model | next |
-| G · Polish & docs | planned |
+| F · Galaxy model (Reid 2019 arms + disc/bulge/bar point model, panorama cross-fade, optional artwork map, heliopause / Oort cloud / Local Bubble / Gould Belt / Radcliffe Wave, arm labels, galactic time rates) | done 2026-09-09; `scripts/dev/galaxy-check.ts` passes |
+| G · Polish & docs | next |
 
 Known issues introduced or exposed by Stage A:
 - In true-scale mode at stellar distances the stacked planet marker sprites form a white blob at the Sun's
@@ -96,4 +96,7 @@ Known issues introduced or exposed by Stage A:
 - X-ray binaries and the Gaia black holes are drawn with unmeasured node angles and phases (flagged); 40 Eri B and
   Stein 2051 B have approximate orbits. Pulsar beams turn no faster than once per 0.35 s for display. Black-hole lensing
   of background stars is not rendered (only the photon ring and disc).
+- The galaxy model is a statistical model: no real dust extinction, the warp and bar are schematic, and the artwork map
+  plane's scale/orientation are approximate. Regions are simple shells and curves. At galactic time rates the Solar
+  System is hidden rather than propagated.
 
