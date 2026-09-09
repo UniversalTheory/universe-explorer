@@ -328,3 +328,72 @@ void main() {
   gl_FragColor = vec4(vColor, a);
 }
 `;
+
+/** Deep-sky photo card: additive, vignetted so the picture's frame never shows. */
+export const DSO_CARD_VERT = /* glsl */ `
+varying vec2 vUv;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  #include <logdepthbuf_vertex>
+}
+`;
+export const DSO_CARD_FRAG = /* glsl */ `
+uniform sampler2D uMap;
+uniform float uOpacity;
+uniform vec3 uTint;
+uniform float uHasImage;
+varying vec2 vUv;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  #include <logdepthbuf_fragment>
+  vec2 d = (vUv - 0.5) * 2.0;
+  float r = length(d);
+  // Elliptical vignette: full inside r < 0.75, gone at the corners.
+  float vig = 1.0 - smoothstep(0.75, 1.0, r);
+  vec3 c = texture2D(uMap, vUv).rgb;
+  vec3 col = mix(c * uTint, c, uHasImage);
+  gl_FragColor = vec4(col * vig * uOpacity, 1.0);
+}
+`;
+
+/** Cluster point cloud: point size from the star's world-space size (∝ cluster radius) with a pixel floor. */
+export const DSO_POINTS_VERT = /* glsl */ `
+attribute vec3 aColor;
+attribute float aSize;
+varying vec3 vColor;
+varying float vAlpha;
+uniform float uPixelRatio;
+uniform float uPxPerRad;
+uniform float uRadiusKm;
+uniform float uOpacity;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vColor = aColor;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float dist = max(length(mv.xyz), 1.0);
+  // A cluster star is drawn ~1/400 of the cluster radius wide, so the cloud thins into individual stars as you approach.
+  float px = (uRadiusKm / 400.0 * aSize / dist) * uPxPerRad;
+  float size = clamp(px, 1.0, 6.0) * uPixelRatio;
+  vAlpha = uOpacity * clamp(px * 2.0, 0.25, 1.0) * (0.5 + 0.5 * aSize / 2.8);
+  gl_PointSize = size;
+  gl_Position = projectionMatrix * mv;
+  #include <logdepthbuf_vertex>
+}
+`;
+export const DSO_POINTS_FRAG = /* glsl */ `
+varying vec3 vColor;
+varying float vAlpha;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  #include <logdepthbuf_fragment>
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d) * 2.0;
+  float a = smoothstep(1.0, 0.3, r) * vAlpha;
+  gl_FragColor = vec4(vColor, a);
+}
+`;
+

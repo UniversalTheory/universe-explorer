@@ -5,6 +5,7 @@ import { Settings } from '@/core/Settings';
 import { vdot, vlen, vnorm, vscale, vsub, type Vec3 } from '@/core/math3';
 import { BODIES, body, registerBodies, type BodyDef } from '@/data/catalog';
 import { buildExoplanetBodies, classify, PLANET_CLASS_LABEL } from '@/data/exoplanets';
+import { buildDeepSkyBodies, DSO_KIND_LABEL } from '@/data/deepsky';
 import { EXO_INCL_ASSUMED, EXO_MASS_IS_MSINI, EXO_PHASE_UNKNOWN, EXO_TRANSITS, nextTransitJd } from '@/ephemeris/exoplanets';
 import { Ephemeris } from '@/ephemeris/Ephemeris';
 import { AU_KM, C_KM_S, GAL_CENTRE_ECL, GAL_NORTH_ECL, LY_KM, eclToThree } from '@/ephemeris/frames';
@@ -63,6 +64,7 @@ export class App {
     const starfield = new Starfield();
     const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load()]);
     if (eph.exo) registerBodies(buildExoplanetBodies(eph.exo));
+    if (eph.deepSky) registerBodies(buildDeepSkyBodies(eph.deepSky));
     return new App(renderer, eph, starfield, quality, pr);
   }
 
@@ -195,6 +197,12 @@ export class App {
     if (id === 'sun' || def.type === 'star') return undefined;
     const h = this.universe.helioOf(id) ?? this.eph.state(id, this.clock.time)?.pos;
     if (!h) return undefined;
+    // Deep-sky cards are photographs taken from here: approach them from the Sun's side, slightly off-axis.
+    if (def.type === 'nebula' || def.type === 'cluster') {
+      const toSun = new THREE.Vector3(-h[0], -h[2], h[1]).normalize();
+      const side = new THREE.Vector3(0, 1, 0).cross(toSun).normalize().multiplyScalar(0.35);
+      return toSun.add(side).setY(toSun.y + 0.2).normalize();
+    }
     // Toward the light source (the Sun, or an exoplanet's host star), in Three axes (x, z, -y), rotated ~50° around the pole and raised ~20°.
     let src: Vec3 = [0, 0, 0];
     if (def.type === 'exoplanet' && def.parent) src = this.universe.helioOf(def.parent) ?? this.eph.state(def.parent, this.clock.time)?.pos ?? src;
@@ -275,6 +283,7 @@ export class App {
     const sunDist = u.sun.group.position.distanceTo(this.cam.camera.position);
     const fade = 1 - Math.min(1, Math.max(0, Math.log10(Math.max(sunDist, 1) / 1e13) / 2));
     this.starfield.render(r, this.cam.camera, this.settings.state.stars, 0.85 * (0.15 + 0.85 * fade));
+    if (this.settings.state.deepSky) { r.render(u.farScene, u.farCamera); r.clearDepth(); }
     r.render(u.scene, this.cam.camera);
 
     // UI updates at low frequency (wall-clock).
@@ -298,6 +307,23 @@ export class App {
     const rows: [string, string, boolean?][] = [];
     const st = this.eph.state(id, t);
     const earth = this.eph.state('earth', t);
+    if (def.type === 'nebula' || def.type === 'cluster') {
+      const rec = this.eph.deepSky?.get(id);
+      if (rec && st) {
+        rows.push(['Type', DSO_KIND_LABEL[rec.kind]]);
+        rows.push(['Distance from Sun', fmtKm(vlen(st.pos)), true]);
+        const acrossLy = (2 * def.radius) / LY_KM;
+        rows.push(['Size', `${acrossLy < 10 ? acrossLy.toFixed(1) : fmtBig(acrossLy)} light-years across · ${rec.maj >= 60 ? `${(rec.maj / 60).toFixed(1)}°` : `${rec.maj.toFixed(0)}′`} on the sky`, true]);
+        rows.push(['Light travel time', fmtLightTime(vlen(st.pos) / C_KM_S)]);
+        if (rec.vmag != null) rows.push(['Apparent magnitude', rec.vmag.toFixed(1)]);
+        if (rec.con) rows.push(['Constellation', rec.con]);
+        if (rec.ngc) rows.push(['Catalogue', rec.ngc.replace(/^(NGC|IC)0*/, '$1 ')]);
+        for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+        if (rec.image) rows.push(['Image', `${rec.image.credit || 'Wikimedia Commons'} · ${rec.image.license}`, true]);
+        this.info.setStats(rows);
+        return;
+      }
+    }
     if (def.type === 'exoplanet' && def.source.kind === 'exoplanet') {
       const p = this.eph.exoplanet(def.source.key);
       const host = def.parent ? body(def.parent) : null;

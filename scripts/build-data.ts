@@ -8,11 +8,12 @@
  *   - NASA Exoplanet Archive pscomppars (public domain) -> exoplanets.json + exoplanets.bin; hosts become star rows
  *   - Celestrak TLEs for ISS and Hubble
  *
- * Usage: npm run data:build [-- --only=moons,spacecraft,smallbodies,stars,exoplanets,tle]  (stars and exoplanets build together)
+ * Usage: npm run data:build [-- --only=moons,spacecraft,smallbodies,stars,exoplanets,tle]  (stars and exoplanets build together; deepsky needs `npm run data:deepsky-images` first for pictures)
  */
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { DEG, wrap180, wrap360 } from '../src/core/math3';
+import { buildDeepSky } from './deepsky';
 
 const OUT = 'public/data';
 mkdirSync(`${OUT}/spacecraft`, { recursive: true });
@@ -725,6 +726,7 @@ async function main() {
   if (want('spacecraft')) data.spacecraft = await buildSpacecraft();
   if (want('stars') || want('exoplanets')) { const r = await buildStars(await loadExoplanetRows()); data.stars = r.stars; data.exoplanets = r.exoplanets; }
   if (want('tle')) data.tle = await buildTle();
+  if (want('deepsky')) data.deepSky = await buildDeepSky();
   writeFileSync(file, JSON.stringify(data));
   console.log('wrote', file);
 }

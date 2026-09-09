@@ -16,6 +16,8 @@ import type { LabelEntry } from './Labels';
 import { CometVisual } from './Comet';
 import { WORLD_UNIT_KM } from '@/ephemeris/frames';
 import { StarCloud } from './StarCloud';
+import { DeepSkyObject, FAR_UNIT_KM } from './DeepSkyObject';
+import { DeepSkyCatalog } from '@/ephemeris/deepsky';
 
 /** Exoplanet systems are lit by their own star on this layer (the Sun's light stays on layer 0). */
 export const EXO_LAYER = 1;
@@ -40,10 +42,15 @@ interface OrbitEntry { line: OrbitLine; group: THREE.Group; parent: string; last
 
 export class Universe {
   readonly scene = new THREE.Scene();
+  /** Deep-sky objects, in units of FAR_UNIT_KM; rendered before the main scene with `farCamera`. */
+  readonly farScene = new THREE.Scene();
+  readonly farCamera = new THREE.PerspectiveCamera(50, 1, 1e-4, 1e19 / FAR_UNIT_KM);
   readonly sun: SunObject;
   readonly bodies = new Map<string, BodyObject>();
   /** Other stars drawn as spheres when close (their catalogue point is hidden meanwhile). */
   readonly stars = new Map<string, SunObject>();
+  /** Nebulae and clusters (photo cards / point clouds). */
+  readonly dso = new Map<string, DeepSkyObject>();
   readonly orbits = new Map<string, OrbitEntry>();
   readonly belts: Belts;
   readonly starCloud: StarCloud;
@@ -88,6 +95,15 @@ export class Universe {
   /** Create the renderer objects for one body (stars become SunObjects, everything else BodyObjects with an orbit line). */
   private add(def: BodyDef) {
     if (!this.eph.available(def)) return;
+    if (def.type === 'nebula' || def.type === 'cluster') {
+      const rec = this.eph.deepSky?.get(def.id);
+      if (!rec || this.dso.has(def.id)) return;
+      const { a, b } = DeepSkyCatalog.sizeKm(rec);
+      const o = new DeepSkyObject(def, rec, a, b, this.quality);
+      this.dso.set(def.id, o);
+      this.farScene.add(o.group);
+      return;
+    }
     if (def.type === 'star') {
       if (this.stars.has(def.id)) return;
       const so = new SunObject(def, false);
@@ -162,6 +178,8 @@ export class Universe {
     if (id === 'sun') return this.sun.def.radius * this.sun.displayScale;
     const st = this.stars.get(id);
     if (st) return st.def.radius * st.displayScale;
+    const d = this.dso.get(id);
+    if (d) return d.a * FAR_UNIT_KM;
     const b = this.bodies.get(id);
     return b ? Math.max(b.def.radius * b.displayScale, 0.02) : 1;
   }
@@ -169,17 +187,19 @@ export class Universe {
     if (id === 'sun') return out.copy(this.sun.group.position);
     const st = this.stars.get(id);
     if (st) return out.copy(st.group.position);
+    const d = this.dso.get(id);
+    if (d) return out.copy(d.group.position).multiplyScalar(FAR_UNIT_KM);
     const b = this.bodies.get(id);
     return b ? out.copy(b.group.position) : out.set(0, 0, 0);
   }
   /** Screen record for any body, star or the Sun. */
   screenOf(id: string) {
     if (id === 'sun') return this.sun.screen;
-    return this.bodies.get(id)?.screen ?? this.stars.get(id)?.screen;
+    return this.bodies.get(id)?.screen ?? this.stars.get(id)?.screen ?? this.dso.get(id)?.screen;
   }
   isAvailable(id: string): boolean {
     if (id === 'sun') return true;
-    return this.bodies.get(id)?.available ?? this.stars.get(id)?.available ?? false;
+    return this.bodies.get(id)?.available ?? this.stars.get(id)?.available ?? this.dso.get(id)?.available ?? false;
   }
   /** Heliocentric ECL km → Three.js world units relative to the floating origin (double precision until here). */
   private worldFromHelio(h: Vec3, out: THREE.Vector3): THREE.Vector3 {
@@ -200,6 +220,10 @@ export class Universe {
       const s = this.eph.state(id, t);
       st.available = !!s;
       if (s) { this.helio.set(id, s.pos); st.helio = s.pos as [number, number, number]; }
+    }
+    for (const [id, d] of this.dso) {
+      const s = this.eph.state(id, t);
+      if (s) { this.helio.set(id, s.pos); d.helio = s.pos as [number, number, number]; }
     }
   }
 
@@ -251,6 +275,19 @@ export class Universe {
       this.exoLight.color.set(body(activeHost).color).lerp(new THREE.Color(1, 1, 1), 0.5);
       this.exoLight.visible = true;
     } else this.exoLight.visible = false;
+    // Far scene: same view, positions in FAR_UNIT_KM.
+    this.farCamera.fov = camera.fov; this.farCamera.aspect = camera.aspect;
+    this.farCamera.quaternion.copy(camera.quaternion);
+    this.farCamera.position.copy(camPos).multiplyScalar(1 / FAR_UNIT_KM);
+    this.farCamera.updateProjectionMatrix();
+    _farSun.copy(sunWorld).multiplyScalar(1 / FAR_UNIT_KM);
+    for (const [id, d] of this.dso) {
+      const h = this.helio.get(id);
+      if (!h || !settings.deepSky) { d.setVisible(false); d.screen.visible = false; continue; }
+      d.setVisible(true);
+      this.worldFromHelio(h, d.group.position).multiplyScalar(1 / FAR_UNIT_KM);
+      d.update(this.farCamera.position, _farSun, pxPerRad, pixelRatio, 1);
+    }
     this.starCloud.setVisible(settings.stars);
     if (settings.stars) this.starCloud.update(this.origin, t.tt / 365.25, pxPerRad, pixelRatio, 1);
     const sunDist = this.sun.group.position.distanceTo(camPos);
@@ -354,6 +391,10 @@ export class Universe {
       if (!st.group.visible) { st.screen.visible = false; continue; }
       doOne(st.group.position, st.screen);
     }
+    for (const d of this.dso.values()) {
+      if (!d.group.visible) { d.screen.visible = false; continue; }
+      doOne(_v2.copy(d.group.position).multiplyScalar(FAR_UNIT_KM), d.screen);
+    }
     // Named cloud stars (positions recomputed from the catalogue; cheap for ~50 stars).
     const years = this.lastYears;
     for (const { index } of this.cloudLabels) {
@@ -389,6 +430,14 @@ export class Universe {
         if (def.type !== 'planet' && obj.screen.radiusPx < 0.8 && obj.def.type !== 'spacecraft' && id !== focusId && obj.screen.distance > 5e8 * (def.type === 'dwarf' ? 30 : 6)) continue;
         add(id, def, obj.screen, def.type === 'spacecraft' || def.type === 'asteroid' || def.type === 'comet');
       }
+      if (settings.deepSky) {
+        for (const [id, d] of this.dso) {
+          if (!d.group.visible || !d.screen.visible) continue;
+          // Label once the object is a few pixels across, or when it is the focus / selection.
+          if (d.screen.radiusPx < 2.5 && id !== focusId && id !== selectedId) continue;
+          add(id, d.def, d.screen, d.screen.radiusPx < 8 && id !== focusId);
+        }
+      }
       if (settings.stars) {
         for (const [id, st] of this.stars) {
           if (!st.group.visible || !st.screen.visible) continue;
@@ -421,6 +470,7 @@ export class Universe {
     test('sun', this.sun.screen);
     for (const [id, obj] of this.bodies) if (obj.group.visible) test(id, obj.screen);
     for (const [id, st] of this.stars) if (st.group.visible) test(id, st.screen);
+    for (const [id, d] of this.dso) if (d.group.visible && d.screen.radiusPx > 2) test(id, d.screen);
     return best;
   }
 
@@ -429,6 +479,7 @@ export class Universe {
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _light = new THREE.Vector3();
+const _farSun = new THREE.Vector3();
 const _p3: Vec3 = [0, 0, 0];
 const _anti = new THREE.Vector3();
 const _vel = new THREE.Vector3();

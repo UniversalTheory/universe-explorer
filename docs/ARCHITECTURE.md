@@ -40,6 +40,9 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/data/catalog.ts` | `BodyDef` for every body: physical data, description, textures, ephemeris source; meteor showers; notable one-off events |
 | `src/data/stars.ts` | ~115 curated stars (nearest, brightest, famous exoplanet hosts) with physical data and descriptions, keyed into the star catalogue |
 | `src/data/exoplanets.ts` | Turns the archive into `BodyDef`s (hosts + planets, lazy), planet classes and procedural skins, curated notes for ~90 systems/planets |
+| `src/data/deepsky.ts` | 90 deep-sky objects as `BodyDef`s with hand-written descriptions and aliases (M / NGC / Caldwell numbers) |
+| `src/render/DeepSkyObject.ts` | Photo card in the sky plane (additive, vignetted, angle-faded) or a Plummer point cloud for clusters |
+| `scripts/deepsky.ts` | Deep-sky list (OpenNGC names, curated distances, Commons image choice), `buildDeepSky`, licence-checked image fetch |
 | `src/ephemeris/frames.ts` | EQJ↔ECL, GAL→EQJ, ECL→Three, AU/GM constants |
 | `src/ephemeris/kepler.ts` | Kepler solvers (elliptic/parabolic/hyperbolic), conic state, orbit sampling |
 | `src/ephemeris/iau.ts` | IAU WGCCRE pole/prime-meridian models for ~40 bodies; `bodyPole`, `bodyFixedToEqj`, `poleFrameToEqj` |
@@ -50,6 +53,7 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/ephemeris/tle.ts` | SGP4 via satellite.js, TEME→EQJ→ECL |
 | `src/ephemeris/stars.ts` | `StarCatalog`: star positions + space velocities from `stars.bin`, linear motion in time; B−V colour helper |
 | `src/ephemeris/exoplanets.ts` | `ExoCatalog` + Keplerian state of a planet about its host in the sky frame (east, north, toward observer) |
+| `src/ephemeris/deepsky.ts` | `DeepSkyCatalog`: fixed positions and physical sizes of nebulae / remnants / clusters from `deepsky.json` |
 | `src/ephemeris/orbit-elements.ts` | osculating elements from a state vector (for drawing planet/moon orbits) |
 | `src/ephemeris/Ephemeris.ts` | facade + per-frame cache; loads `public/data` |
 | `src/ephemeris/types.ts` | shape of `public/data/ephemeris.json` |
@@ -237,4 +241,30 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
 - **Info panel**: class, host, period, a, e, i (flagged when assumed), radius, mass or M sin i, next transit date and
   duration from the archive midpoint, phase/node caveats, discovery method and facility.
 - **Search** ranks name-prefix matches first and curated entries above auto-generated ones.
+
+## Deep sky (Phase 2, Stage D)
+
+- **Data**: `scripts/deepsky.ts` lists 90 objects inside the Milky Way (26 emission/H II regions, reflection nebulae,
+  7 supernova remnants, 14 planetary nebulae, 3 dark clouds, 17 open and 20 globular clusters). Positions, angular
+  sizes, position angles, V magnitudes and constellations come from OpenNGC (NGC.csv + addendum; CC BY-SA 4.0);
+  distances are curated in light-years (OpenNGC has none). Objects without an NGC/IC entry (Cas A, Vela SNR, Hyades,
+  Westerlund 1…) carry inline coordinates. `npm run data:build -- --only=deepsky` writes `public/data/deepsky.json`.
+- **Imagery**: `npm run data:deepsky-images` asks the Wikimedia Commons API for each object (an explicit `File:` or a
+  search), accepts only files whose `LicenseShortName` is CC BY, CC BY-SA, CC0 or public domain, prefers ESO / NASA /
+  ESA / Hubble credits and large originals, records credit + licence + source page, and downloads a 1024 px thumbnail
+  to `public/textures/deepsky/<id>.jpg`, then `scripts/compress-deepsky.py` (Pillow) re-encodes everything as ≤ 1024 px JPEG q82
+  (16 s between requests; picks cached in `node_modules/.cache/deepsky-images.json`,
+  delete an entry to re-pick). Credits appear in the object's info panel. Photo orientation is as published (north-up
+  is not guaranteed) and the position angle is not applied.
+- **Rendering** (`DeepSkyObject`): nebulae are a `PlaneGeometry` card whose long side spans the catalogued major axis at
+  the object's distance, oriented with its normal toward the Sun and up toward the celestial pole, drawn additively with
+  an elliptical vignette so the frame never shows and stars shine through. Opacity = size fade (0.6–3 px apparent
+  radius) × viewing-angle fade (0.12 + 0.88 cos²) × a thinning factor when the camera is inside the object. Textures load
+  on first visibility. Clusters ≥ 700 ly are a Plummer-profile point cloud (2,600 points globular / 320 open, halved on
+  low quality) with a per-star world size so the cloud resolves into stars on approach, plus a core glow for globulars;
+  nearer clusters (Hyades, Pleiades, Beehive, Coma, Southern Pleiades, Alpha Persei) are already in the star catalogue
+  star by star and get only a faint glow and a label.
+- **Bodies**: `buildDeepSkyBodies` registers them at boot with `source: { kind: 'fixed' }`, `radius` = physical
+  semi-major axis, type `nebula` or `cluster` (no minimum pixel size); labels appear above 2.5 px apparent radius.
+- **Verification**: `scripts/dev/deepsky-check.ts` (positions, Orion at 1.5° from the Sun, licences).
 

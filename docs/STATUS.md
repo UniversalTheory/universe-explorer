@@ -70,8 +70,8 @@ Stage progress (see `DECISIONS.md` P11–P14 for the scope):
 | A · Foundations (units hook, far plane, zoom range, scale bar, zoom ladder, unit-aware formatting, catalogue kinds) | done 2026-09-09; verified by headless screenshots at 1e13–1e18 km and `npm test` |
 | B · 3D stars (108k-star standard tier + 221k deep tier, proper motion, star spheres, 115 curated stars, star search) | done 2026-09-09; `scripts/dev/stars-check.ts` passes, screenshots at 50 ly, Sirius, Proxima |
 | C · Exoplanets (6,325 planets / 4,741 hosts from the NASA Exoplanet Archive, lazy systems, own-star lighting, transit-epoch phases, ~90 curated write-ups) | done 2026-09-09; `scripts/dev/exoplanets-check.ts` passes (transit geometry, Kepler consistency) |
-| D · Deep sky | next |
-| E · Compact objects | planned |
+| D · Deep sky (90 nebulae / remnants / clusters from OpenNGC with curated distances; 49 licence-checked Commons photos (9.5 MB) on sky-plane cards in a far scene; cluster point clouds) | done 2026-09-09; `scripts/dev/deepsky-check.ts` passes; Orion, Crab, Horsehead, Eagle, Omega Centauri screenshots checked |
+| E · Compact objects | next |
 | F · Galaxy model | planned |
 | G · Polish & docs | planned |
 
@@ -88,4 +88,9 @@ Known issues introduced or exposed by Stage A:
   planets without a periastron epoch have an arbitrary phase (both flagged in the panel). Circumbinary planets orbit the
   archive's single host position. Planet radii come from mass when unmeasured. 28 hosts (35 planets) lack a distance
   and are omitted. `exoplanets.json` is 0.7 MB (gzips to ~0.15 MB on Pages).
+- Deep-sky photos are flat cards in the plane of the sky: correct from the Sun's direction, thinning to a glow
+  off-axis; their orientation is as published on Commons (not necessarily north-up) and the catalogued position angle
+  is not applied. Cluster point clouds are statistical (Plummer profile), not the real members. Distances are
+  literature values rounded to two or three figures. Kepler's SNR has no acceptable Commons photo yet (drawn as a glow);
+  the Heart and Soul share one wide-field photo; a few pictures are infrared or composite (Trifid, Pacman, Southern Ring).
 

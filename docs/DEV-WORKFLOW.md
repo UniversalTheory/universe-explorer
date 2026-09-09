@@ -37,6 +37,7 @@ npx tsx scripts/dev/events-check.ts          # timing + sample of computed event
 npx tsx scripts/dev/eclipse-check.ts <epochMs>  # is moon X inside its parent's shadow?
 npx tsx scripts/dev/stars-check.ts           # star distances, magnitudes, proper motion, Barnard's closest approach
 npx tsx scripts/dev/exoplanets-check.ts      # exoplanet transit geometry, Kepler consistency, host keys
+npx tsx scripts/dev/deepsky-check.ts         # deep-sky positions, Orion apparent size, image licences
 ```
 
 ## Data refresh
@@ -47,6 +48,7 @@ npm run data:build -- --only=tle             # fresh ISS/Hubble TLEs (do this mo
 npm run data:build -- --only=moons           # refit moons (20-year arcs around EPOCH_JD)
 npm run data:build -- --only=stars           # HYG v4.1 (34 MB) + AT-HYG m10 (28 MB) + Exoplanet Archive (3 MB) downloads, cached in node_modules/.cache; rebuilds stars + exoplanets together
 npm run data:textures                        # planet textures; skips files already present
+npm run data:deepsky-images [id …]           # Commons imagery for the deep-sky list (slow, ~16 s per object); then data:build -- --only=deepsky
 ```
 
 Horizons request notes: `REF_PLANE='B'` = parent body equator; `CSV_FORMAT='YES'`; `OUT_UNITS='KM-S'`
@@ -71,6 +73,15 @@ SBDB: `https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=<designation>&phys-par=1`.
 2. Add a `StarSpec` to `src/data/stars.ts` with the same id (radius in R☉, mass in M☉, temperature, spectral type,
    bolometric luminosity, description, aliases for search).
 3. `npx tsx scripts/dev/stars-check.ts`, then `node scripts/dev/snap.mjs out.png --wait=20000 --eval="app.select('<id>'); app.flyTo('<id>'); 1" --after=8000`.
+
+## Adding a deep-sky object
+
+1. Add a line to `DEEP_SKY` in `scripts/deepsky.ts` (OpenNGC name or inline RA/Dec/size, kind, distance in ly, and a
+   Commons search phrase or explicit `File:` name).
+2. `npm run data:deepsky-images <id>` (checks the licence, downloads 1024 px), then `npm run data:build -- --only=deepsky`.
+3. Add a description to `DSO_NOTES` in `src/data/deepsky.ts`; run `npx tsx scripts/dev/deepsky-check.ts`.
+   To replace a wrong picture, delete the object's entry in `node_modules/.cache/deepsky-images.json` and the jpg, set an
+   explicit `File:` name, and re-run step 2.
 
 ## Curating an exoplanet system
 

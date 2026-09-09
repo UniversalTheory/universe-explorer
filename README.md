@@ -33,7 +33,7 @@ the first load.
 - Spacecraft: Voyager 1 and 2, Pioneer 10 and 11, New Horizons, JWST, Parker Solar Probe, Europa
   Clipper, Psyche, plus the ISS and Hubble around Earth.
 - Asteroid belt, Jupiter-region and Kuiper belt / scattered disc as 15,000 Keplerian particles
-  propagated on the GPU, and 108,000 real stars in 3D at their measured distances (330,000 with the on-demand deep tier), moving with their proper motions, every confirmed exoplanet (6,300+, NASA Exoplanet Archive) on Keplerian orbits with real transit phases, over the ESO Milky Way panorama in
+  propagated on the GPU, and 108,000 real stars in 3D at their measured distances (330,000 with the on-demand deep tier), moving with their proper motions, every confirmed exoplanet (6,300+, NASA Exoplanet Archive) on Keplerian orbits with real transit phases, 90 nebulae, supernova remnants and star clusters at their true distances and sizes, over the ESO Milky Way panorama in
   correct galactic orientation.
 
 **Physics and fidelity**
@@ -130,5 +130,5 @@ Ephemerides: NASA/JPL Horizons and Small-Body Database. Positions in the browser
 (MIT). Planet textures: Solar System Scope (CC BY 4.0). Moon maps: NASA/JPL/Space Science Institute
 and Lunar and Planetary Institute (P. Schenk) Cassini and Voyager global maps, and USGS Galileo/Voyager
 mosaics, public domain, via Wikimedia Commons. Milky Way panorama: ESO/S. Brunier (CC BY 4.0).
-Star catalogues: HYG v4.1 and AT-HYG v4.0 by David Nash / astronexus (CC BY-SA 4.0), carrying Gaia DR3 distances. Exoplanets: NASA Exoplanet Archive (operated by Caltech/IPAC under contract with NASA), Planetary Systems Composite Parameters table. Rotation models: IAU Working Group on Cartographic
+Star catalogues: HYG v4.1 and AT-HYG v4.0 by David Nash / astronexus (CC BY-SA 4.0), carrying Gaia DR3 distances. Exoplanets: NASA Exoplanet Archive (operated by Caltech/IPAC under contract with NASA), Planetary Systems Composite Parameters table. Deep-sky positions and sizes: OpenNGC (CC BY-SA 4.0); nebula photographs from Wikimedia Commons under CC BY / CC BY-SA / public-domain licences, credited individually in the app. Rotation models: IAU Working Group on Cartographic
 Coordinates and Rotational Elements.

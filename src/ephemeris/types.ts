@@ -39,5 +39,7 @@ export interface EphemerisData {
   };
   /** NASA Exoplanet Archive extract (see src/ephemeris/exoplanets.ts). */
   exoplanets?: { file: string; bin: string; stride: number; count: number; hosts: number };
+  /** Deep-sky objects (see src/ephemeris/deepsky.ts). */
+  deepSky?: { file: string; count: number };
   tle: { fetched: string } & Record<string, string[]>;
 }

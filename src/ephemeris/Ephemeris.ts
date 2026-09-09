@@ -17,6 +17,7 @@ import { elementsFromState } from './orbit-elements';
 import type { EphemerisData } from './types';
 import { StarCatalog } from './stars';
 import { ExoCatalog, exoplanetOrbitPath, exoplanetState, type ExoJson } from './exoplanets';
+import { DeepSkyCatalog, type DsoJson } from './deepsky';
 
 const ZERO: OrbitState = { pos: [0, 0, 0], vel: [0, 0, 0] };
 
@@ -41,6 +42,7 @@ export class Ephemeris {
     /** Star catalogue; scripts that only need Solar System bodies may omit it. */
     readonly stars: StarCatalog = new StarCatalog(new ArrayBuffer(0)),
     readonly exo: ExoCatalog | null = null,
+    readonly deepSky: DeepSkyCatalog | null = null,
   ) {}
 
   static async load(base = 'data/'): Promise<Ephemeris> {
@@ -60,7 +62,9 @@ export class Ephemeris {
       const [json, bin] = await Promise.all([fetch(base + data.exoplanets.file).then((r) => r.json() as Promise<ExoJson>), fetch(base + data.exoplanets.bin).then((r) => r.arrayBuffer())]);
       exo = new ExoCatalog(json, bin);
     }
-    return new Ephemeris(data, trajectories, satellites, stars, exo);
+    let deepSky: DeepSkyCatalog | null = null;
+    if (data.deepSky) deepSky = new DeepSkyCatalog((await (await fetch(base + data.deepSky.file)).json()) as DsoJson);
+    return new Ephemeris(data, trajectories, satellites, stars, exo, deepSky);
   }
 
   /** Exoplanet record for a catalogue key (the archive planet name). */

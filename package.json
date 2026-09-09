@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "data:build": "tsx scripts/build-data.ts",
     "data:textures": "bash scripts/fetch-textures.sh",
-    "test": "tsx scripts/verify-ephemeris.ts"
+    "test": "tsx scripts/verify-ephemeris.ts",
+    "data:deepsky-images": "tsx scripts/fetch-deepsky-images.ts && python3 scripts/compress-deepsky.py"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",
