@@ -14,6 +14,10 @@ export interface FocusTarget {
 }
 
 const EASE = (t: number) => smoothstep(clamp(t, 0, 1));
+/** Far plane, km: beyond the far side of the Galactic disc. The log depth buffer keeps precision. */
+export const CAMERA_FAR_KM = 1e19;
+/** Furthest the camera may back away from its focus, km (≈ 65 kpc, enough to frame the whole disc). */
+export const MAX_CAMERA_DISTANCE_KM = 2e18;
 
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
@@ -38,7 +42,7 @@ export class CameraController {
   private downPos = { x: 0, y: 0, t: 0 };
 
   constructor(readonly dom: HTMLElement, initial: FocusTarget) {
-    this.camera = new THREE.PerspectiveCamera(50, 1, 1, 1e14);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 1, CAMERA_FAR_KM);
     this.focus = initial;
     this.bind();
   }
@@ -130,7 +134,9 @@ export class CameraController {
     d.addEventListener('pointercancel', up);
     d.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const f = Math.exp(clamp(e.deltaY, -120, 120) * 0.0022);
+      // Zoom gain grows with distance: the Galaxy is ten orders of magnitude beyond Neptune.
+      const gain = 0.0022 * clamp(1 + 0.35 * Math.log10(Math.max(1, this.distance / 2e10)), 1, 3);
+      const f = Math.exp(clamp(e.deltaY, -120, 120) * gain);
       this.zoomVel = clamp(this.zoomVel + Math.log(f), -0.6, 0.6);
       this.onUserInput?.();
     }, { passive: false });
@@ -140,7 +146,7 @@ export class CameraController {
   zoomBy(factor: number) { this.distance = this.clampDistance(this.distance * factor); this.transition = null; }
   private clampDistance(dist: number) {
     const r = this.focus.radius();
-    return clamp(dist, r * 1.35 + 0.5, 6e10);
+    return clamp(dist, r * 1.35 + 0.5, MAX_CAMERA_DISTANCE_KM);
   }
 
   /** Advance by dt seconds; returns the camera position offset (km) relative to the focus body. */
@@ -198,7 +204,7 @@ export class CameraController {
     }
     const r = this.focus.radius();
     this.camera.near = Math.max(0.02, (this.distance - r) * 0.002);
-    this.camera.far = 1e14;
+    this.camera.far = CAMERA_FAR_KM;
     this.camera.updateProjectionMatrix();
   }
 

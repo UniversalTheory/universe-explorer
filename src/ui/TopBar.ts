@@ -1,4 +1,16 @@
 import type { BodyDef } from '@/data/catalog';
+import { AU_KM, KPC_KM, LY_KM } from '@/ephemeris/frames';
+
+export type ZoomView = 'system' | 'stars' | 'galaxy';
+/**
+ * The zoom ladder: three canonical framings of the Sun. `radius` is the region to frame (km);
+ * `min`/`max` are the camera distances (km) for which the step reads as active.
+ */
+export const ZOOM_VIEWS: { id: ZoomView; label: string; title: string; radius: number; min: number; max: number }[] = [
+  { id: 'system', label: 'Solar System', title: 'Frame the planets out to Neptune', radius: 32 * AU_KM, min: 0, max: 0.05 * LY_KM },
+  { id: 'stars', label: 'Stars', title: 'The solar neighbourhood, 50 light-years across', radius: 25 * LY_KM, min: 0.05 * LY_KM, max: 300 * LY_KM },
+  { id: 'galaxy', label: 'Galaxy', title: 'The whole Milky Way', radius: 22 * KPC_KM, min: 300 * LY_KM, max: Infinity },
+];
 
 const ICONS = {
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
@@ -15,15 +27,17 @@ export class TopBar {
   private active = -1;
   private matches: BodyDef[] = [];
 
-  constructor(root: HTMLElement, private bodies: BodyDef[], private opts: { onSelect: (id: string) => void; onToggleEvents: () => void; onToggleSettings: () => void }) {
+  constructor(root: HTMLElement, private bodies: BodyDef[], private opts: { onSelect: (id: string) => void; onToggleEvents: () => void; onToggleSettings: () => void; onJump: (view: ZoomView) => void }) {
     this.el = document.createElement('div');
     this.el.className = 'topbar';
     this.el.innerHTML = `
       <div class="glass brand"><span class="dot"></span><span class="title">Universe Explorer</span><span class="sub">live solar system</span></div>
-      <div class="search">${ICONS.search}<input type="search" placeholder="${innerWidth < 720 ? 'Search…' : 'Search planets, moons, comets, spacecraft…'}" autocomplete="off" spellcheck="false" /><div class="glass search-results"></div></div>
+      <div class="search">${ICONS.search}<input type="search" placeholder="${innerWidth < 720 ? 'Search…' : 'Search planets, moons, stars, spacecraft…'}" autocomplete="off" spellcheck="false" /><div class="glass search-results"></div></div>
+      <div class="glass ladder" role="group" aria-label="Zoom level">${ZOOM_VIEWS.map((v, i) => `<button data-view="${v.id}" title="${v.title} (${i + 1})">${v.label}</button>`).join('')}</div>
       <div class="spacer"></div>
       <div class="glass actions"><button class="icon-btn" data-role="events" title="Upcoming events (E)">${ICONS.events}</button><button class="icon-btn" data-role="settings" title="Display settings (S)">${ICONS.settings}</button></div>`;
     root.appendChild(this.el);
+    this.el.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.addEventListener('click', () => opts.onJump(b.dataset.view as ZoomView)));
     this.input = this.el.querySelector('input')!;
     this.results = this.el.querySelector('.search-results')!;
     this.eventsBtn = this.el.querySelector('[data-role=events]')!;
@@ -43,13 +57,17 @@ export class TopBar {
   }
 
   focusSearch() { this.input.focus(); this.input.select(); }
+  /** Highlight the ladder step that matches the current camera distance (null = none). */
+  setZoomView(view: ZoomView | null) {
+    this.el.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === view));
+  }
   setEventsActive(on: boolean) { this.eventsBtn.classList.toggle('active', on); }
   setSettingsActive(on: boolean) { this.settingsBtn.classList.toggle('active', on); }
 
   private search(q: string) {
     const s = q.trim().toLowerCase();
     this.matches = s
-      ? this.bodies.filter((b) => b.name.toLowerCase().includes(s) || b.id.includes(s) || b.type.includes(s)).slice(0, 12)
+      ? this.bodies.filter((b) => b.name.toLowerCase().includes(s) || b.id.includes(s) || b.type.includes(s) || b.aliases?.some((a) => a.toLowerCase().includes(s))).slice(0, 12)
       : this.bodies.filter((b) => b.type === 'planet' || b.type === 'star').slice(0, 12);
     this.active = 0;
     this.render();

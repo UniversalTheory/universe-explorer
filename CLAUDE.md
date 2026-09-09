@@ -27,26 +27,29 @@ Moon map processing uses Python 3 + Pillow + numpy (already installed on the use
 npm run dev            # dev server
 npm run build          # tsc --noEmit + vite build -> dist/
 npm test               # scripts/verify-ephemeris.ts: compares positions with JPL Horizons (needs network)
-npm run data:build     # rebuild public/data from Horizons / SBDB / HYG / Celestrak (-- --only=moons,...)
+npm run data:build     # rebuild public/data from Horizons / SBDB / HYG+AT-HYG / Celestrak (-- --only=moons,stars,...)
 npm run data:textures  # download planet textures + Milky Way
 python3 scripts/process-moon-maps.py <dir> [names]   # moon map sheets -> public/textures/moons
-node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=js]   # headless screenshot
+node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=js]   # headless screenshot (any installed Chromium browser)
+npx tsx scripts/dev/stars-check.ts   # star catalogue sanity checks (distances, proper motion)
 ```
 
 ## Non-negotiable conventions
 
 1. **World frame is J2000 ecliptic, kilometres, heliocentric.** Three.js axes are a permutation of
    it: `three = (x, z, -y)` of ECL so ecliptic north is +Y. Helpers in `src/ephemeris/frames.ts`.
-   Never invent another frame; convert at the boundary.
+   Never invent another frame; convert at the boundary. km remain the unit out to the edge of the
+   Galaxy (`WORLD_UNIT_KM` = 1 is the only hook for a future larger unit).
 2. **All positions come from `src/ephemeris/Ephemeris.ts`** (`state`, `relative`, `orientation`,
-   `orbitCurve`, `periodDays`). Rendering and UI must not compute positions themselves.
+   `orbitCurve`, `periodDays`). Rendering and UI must not compute positions themselves. Stars included:
+   `eph.stars` (a `StarCatalog`) is the only source of star positions; `StarCloud` reads it directly for speed.
 3. **Time**: the simulation instant is a JS epoch ms (UTC). `makeSimTime(ms)` gives `tt` (days since
    J2000 TT) and `jd`. Ephemeris code takes `SimTime`, not Date. The time bar displays *local* time.
 4. **Floating origin**: the focused body sits at the Three.js world origin each frame. Body positions
    are `helio - origin`. Keep double precision (plain number tuples) until the final subtraction.
 5. **Ephemeris code must stay DOM-free** (it runs in Node for tests and in the events Web Worker).
 6. `public/data` and `public/textures` are generated. Do not hand-edit; change the scripts.
-7. Keep `npm test` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
+7. Keep `npm test` and `npx tsx scripts/dev/stars-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
 8. Free/open assets only (public domain, CC BY, CC BY-SA, MIT). Credit new sources in README + settings panel.
 9. Product scope decisions are the user's: static-only for now, scale toggle, time scrubber (see
    `docs/DECISIONS.md`). Do not add a backend or paid service unprompted.
@@ -58,12 +61,15 @@ node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=j
 - `modelMatrix` is not available in fragment shaders; pass what you need as varyings.
 - Anything injected into MeshStandardMaterial via `onBeforeCompile` that reads `vMapUv` must be guarded
   with `#ifdef USE_MAP` (textures load asynchronously; the first compile has no map).
-- Headless Edge under SwiftShader boots the page in ~10–18 s and renders ~2 fps. Base animations and UI
+- Headless Chromium (Brave now; Edge was removed) under SwiftShader boots the page in ~10–18 s and renders ~2 fps. Base animations and UI
   timers on wall-clock time, never on accumulated frame `dt`.
 - The page clock shows local time (machine is US Eastern). Convert to UTC before reproducing a
   screenshot's geometry in Node. A dark moon can be a real eclipse by its parent; check with
   `npx tsx scripts/dev/eclipse-check.ts <epoch-ms>`.
 - Wikimedia Commons rate-limits aggressively. Use a descriptive User-Agent, 15–20 s gaps, and the
   `Special:FilePath/<file>&width=N` thumbnail URL rather than originals.
+- A camera-facing world-sized quad rasterises as a bow-tie beyond ~1e14 km (SwiftShader at least). Use a
+  pixel-sized point sprite for anything that must stay visible at stellar distances (see `GLOW_POINT_VERT`).
+- Gaia archive data is CC BY-NC; take star data only from HYG / AT-HYG (CC BY-SA 4.0).
 - Horizons: `REF_PLANE='B'` (body equator), CSV output, `TLIST` for single instants; spacecraft span errors
   say "prior to A.D. …" / "after A.D. …" and the pipeline clamps on them automatically.

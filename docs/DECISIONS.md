@@ -41,3 +41,19 @@ explicitly by the owner and should not be reversed without asking.
 | T17 | Textures and baked data are committed to the repo (≈90 MB). | Clone-and-run simplicity. Revisit if repo history grows (move textures to CI download). |
 | T18 | Headless visual testing via `playwright-core` driving the installed Microsoft Edge (`scripts/dev/snap.mjs`). | User declined the Chrome extension; no Chromium installed; plain headless Edge hung on the animation loop. |
 | T19 | Hosting analysis: GitHub Pages is free and sufficient for v1 (site 93 MB, limits 1 GB / 100 GB per month); the future Horizons proxy would live on Cloudflare Workers or Vercel functions; large galaxy data would go to an object store/CDN. | Documented for the owner; deployment deferred (P7). |
+| T20 | **Phase 2 (Milky Way) keeps km as the world unit.** Positions relative to the floating origin stay < 1e18 km inside the Galaxy, so squared float32 lengths stay < 1e36. `WORLD_UNIT_KM` in `frames.ts` (= 1) is the single hook for the extragalactic phase, where a larger unit will be needed. Camera far plane 1e19 km, max camera distance 2e18 km (2026-09-09). | A full unit-tier system now would touch radii, camera distances and shader constants for no present benefit. |
+| T21 | Star data comes only through HYG / AT-HYG (CC BY-SA 4.0), never the Gaia archive directly (2026-09-09). | Gaia data is CC BY-NC 3.0 IGO (non-commercial), which conflicts with P5. HYG/AT-HYG redistribute Gaia DR3 distances under CC BY-SA. |
+| T22 | The Sun's glow is a pixel-sized point sprite whenever the Sun is small on screen, and a world-sized quad only close up (2026-09-09). | A camera-facing quad at > ~1e14 km rasterised as a bow-tie under SwiftShader (corners collapsed); a single-vertex point sprite has no large triangle to interpolate. The same pattern will be used for stars. |
+| T23 | Headless screenshots use whichever Chromium-based browser is installed (Edge, Brave, Chrome, Chromium; `SNAP_BROWSER` overrides) (2026-09-09). | Edge was uninstalled; Brave is present. |
+
+## Phase 2 — Milky Way (2026-09-09)
+
+Owner decisions taken when the phase was planned (plan page kept outside the repo; summary here):
+
+| # | Decision | Rationale |
+| --- | --- | --- |
+| P11 **(user)** | Scope: everything inside the Milky Way — real 3D stars with proper motion, all confirmed exoplanets (plus ~40 curated systems), nebulae and clusters as image cards / point clouds, black holes and neutron stars, interstellar visitors and outbound probes extended past their data spans, the heliopause / Oort cloud / Local Bubble as schematic regions, and a procedural galaxy model (disc, bar, arms from Reid et al. 2019) with the ESO/NASA/JPL-Caltech/R. Hurt artwork as an optional map plane. | Owner chose the full recommended scope. |
+| P12 **(user)** | Stars: a bundled standard tier (HYG, ~115k stars with distances) plus an on-demand deep tier (AT-HYG mag < 10, ~330k), off by default on mobile. | Density out to ~1 kpc without a 10 MB boot download. |
+| P13 **(user)** | Build order A→G: foundations, 3D stars, exoplanets, deep sky, compact objects, galaxy model, polish/docs. Each stage ships a working app. | Dependencies: the galaxy model needs the star cloud and galactic time rates. |
+| P14 **(user)** | Galactic time rates (1,000 and 100,000 yr/s) will be enabled with Solar System bodies frozen at those rates; hosting stays inside the GitHub Pages bundle (≈ +22 MB) for this phase. | Solar System ephemerides are not valid over millennia; the bundle is well under Pages limits. |
+

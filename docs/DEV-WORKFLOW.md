@@ -2,9 +2,10 @@
 
 ## Environment
 
-macOS (Apple Silicon), Node 24.14, npm 11.11, Python 3.11 with Pillow + numpy, Microsoft Edge installed
-(used headless via `playwright-core`; Chrome is not installed and the Claude-in-Chrome extension was
-declined). Machine timezone: US Eastern.
+macOS (Apple Silicon), Node 24.14, npm 11.11, Python 3.11 with Pillow + numpy. Headless screenshots use
+`playwright-core` driving whichever Chromium-based browser is installed (Edge, Brave, Chrome or Chromium are
+probed in that order; `SNAP_BROWSER=/path/to/binary` overrides). As of 2026-09-09 Edge is gone and Brave is
+used. The Claude-in-Chrome extension was declined. Machine timezone: US Eastern.
 
 ## Everyday loop
 
@@ -15,6 +16,8 @@ node scripts/dev/snap.mjs out.png --hash=saturn --wait=18000
 node scripts/dev/snap.mjs out.png --mobile --hash=jupiter --wait=18000
 node scripts/dev/snap.mjs out.png --wait=16000 --eval="app.settings.set('scaleMode','real'); 1" --after=4000
 node scripts/dev/snap.mjs out.png --wait=16000 --eval="window.dispatchEvent(new KeyboardEvent('keydown',{key:'e'})); 1"
+node scripts/dev/snap.mjs out.png --wait=18000 --eval="app.jumpTo('galaxy'); 1" --after=6000   # zoom ladder views: system / stars / galaxy
+node scripts/dev/snap.mjs out.png --wait=18000 --eval="app.flyTo('sun', 1e15); 1" --after=5000  # any camera distance in km
 ```
 
 `snap.mjs` prints deduplicated console/worker logs, including full Three.js shader compile errors.
@@ -32,6 +35,7 @@ npm test                                     # positions vs JPL Horizons (networ
 npx tsx scripts/dev/rotation-check.ts        # Earth sub-solar longitude at Greenwich noon
 npx tsx scripts/dev/events-check.ts          # timing + sample of computed events
 npx tsx scripts/dev/eclipse-check.ts <epochMs>  # is moon X inside its parent's shadow?
+npx tsx scripts/dev/stars-check.ts           # star distances, magnitudes, proper motion, Barnard's closest approach
 ```
 
 ## Data refresh
@@ -40,6 +44,7 @@ npx tsx scripts/dev/eclipse-check.ts <epochMs>  # is moon X inside its parent's 
 npm run data:build                           # everything (≈5 min; Horizons is polite-rate-limited in the script)
 npm run data:build -- --only=tle             # fresh ISS/Hubble TLEs (do this most often)
 npm run data:build -- --only=moons           # refit moons (20-year arcs around EPOCH_JD)
+npm run data:build -- --only=stars           # HYG v4.1 (34 MB) + AT-HYG m10 (28 MB) downloads, cached in node_modules/.cache
 npm run data:textures                        # planet textures; skips files already present
 ```
 
@@ -57,6 +62,14 @@ SBDB: `https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=<designation>&phys-par=1`.
    `CRAFT` with segments, then `--only=spacecraft`), `tle` (add to `buildTle`).
 3. Rotation: add an IAU model to `src/ephemeris/iau.ts` if one exists; otherwise set `rotationHours`.
 4. Run `npm test`; the moon test vectors are generated automatically.
+
+## Adding a star
+
+1. Add the star to `STAR_KEYS` in `scripts/build-data.ts` (`{ hip }`, `{ gl: 'Gl 406' }`, or `{ inline: {...} }` for
+   stars HYG lacks) and run `npm run data:build -- --only=stars`.
+2. Add a `StarSpec` to `src/data/stars.ts` with the same id (radius in R☉, mass in M☉, temperature, spectral type,
+   bolometric luminosity, description, aliases for search).
+3. `npx tsx scripts/dev/stars-check.ts`, then `node scripts/dev/snap.mjs out.png --wait=20000 --eval="app.select('<id>'); app.flyTo('<id>'); 1" --after=8000`.
 
 ## Adding a moon texture
 

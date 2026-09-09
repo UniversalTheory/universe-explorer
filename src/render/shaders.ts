@@ -60,6 +60,9 @@ void main() {
 export const SUN_FRAG = /* glsl */ `
 uniform sampler2D uMap;
 uniform float uTime;
+uniform vec3 uHot;    // granule palette: bright cells …
+uniform vec3 uCool;   // … and dark lanes (the Sun's are yellow-white / orange; other stars derive theirs from their colour)
+uniform float uMono;  // 1 = use the texture's luminance only (other stars: keeps the Sun's orange out of their hue)
 varying vec3 vNormal;
 varying vec2 vUv;
 varying vec3 vPos;
@@ -84,9 +87,8 @@ void main() {
   float g = fbm(p * 6.0 + vec3(t, -t * 0.7, t * 0.3));
   float g2 = fbm(p * 18.0 - vec3(t * 1.3, t, -t * 0.5));
   float granules = 0.5 + 0.5 * g + 0.25 * g2;
-  vec3 hot = vec3(1.0, 0.95, 0.75);
-  vec3 cool = vec3(1.0, 0.55, 0.15);
-  vec3 col = mix(cool, hot, clamp(granules, 0.0, 1.0)) * (0.75 + 0.6 * base);
+  vec3 baseC = mix(base, vec3(dot(base, vec3(0.299, 0.587, 0.114))), uMono);
+  vec3 col = mix(uCool, uHot, clamp(granules, 0.0, 1.0)) * (0.75 + 0.6 * baseC);
   // Limb darkening
   float mu = abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
   col *= 0.55 + 0.45 * pow(mu, 0.6);
@@ -144,6 +146,36 @@ varying vec2 vUv;
 void main() {
   #include <logdepthbuf_fragment>
   vec2 d = vUv - 0.5;
+  float r = length(d) * 2.0;
+  float core = exp(-r * r * 14.0);
+  float halo = exp(-r * 3.2) * 0.5;
+  float a = (core + halo) * uStrength * smoothstep(1.0, 0.6, r);
+  gl_FragColor = vec4(uColor, clamp(a, 0.0, 1.0));
+}
+`;
+
+/**
+ * Same glow as a single point sprite, sized in pixels. Used when the Sun is far away:
+ * a world-sized quad at > 1e14 km rasterises badly (its corners collapse into a bow-tie
+ * under SwiftShader), while a point sprite needs no interpolation across a huge triangle.
+ */
+export const GLOW_POINT_VERT = /* glsl */ `
+uniform float uSizePx;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  gl_PointSize = uSizePx;
+  #include <logdepthbuf_vertex>
+}
+`;
+export const GLOW_POINT_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform float uStrength;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  #include <logdepthbuf_fragment>
+  vec2 d = gl_PointCoord - 0.5;
   float r = length(d) * 2.0;
   float core = exp(-r * r * 14.0);
   float halo = exp(-r * 3.2) * 0.5;
@@ -252,5 +284,47 @@ void main() {
   vec2 d = gl_PointCoord - 0.5;
   if (length(d) > 0.5) discard;
   gl_FragColor = vec4(uColor, uOpacity * vFade);
+}
+`;
+
+/**
+ * 3D star cloud: one point per catalogued star, sized by the apparent magnitude seen from
+ * the camera (absolute magnitude + distance), so stars brighten as you approach them.
+ */
+export const STARCLOUD_VERT = /* glsl */ `
+attribute float aAbsMag;
+attribute vec3 aColor;
+attribute float aHide;
+varying vec3 vColor;
+varying float vAlpha;
+uniform float uPixelRatio;
+uniform float uBoost;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vColor = aColor;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  float distPc = max(length(mv.xyz) / 3.0856775814913673e13, 1e-6);
+  float mag = aAbsMag + 5.0 * log2(distPc / 10.0) * 0.30103;   // 5 log10(d / 10 pc); GLSL has no log10
+  float b = pow(10.0, -0.4 * mag) * uBoost;           // brightness relative to magnitude 0
+  float size = clamp(1.2 + 2.2 * log2(1.0 + b * 12.0), 1.0, 14.0);
+  vAlpha = clamp(0.35 + 0.65 * log2(1.0 + b * 4.0), 0.12, 1.0);
+  if (mag > 7.2 || aHide > 0.5) { vAlpha = 0.0; size = 1.0; }
+  gl_PointSize = size * uPixelRatio;
+  gl_Position = projectionMatrix * mv;
+  #include <logdepthbuf_vertex>
+}
+`;
+export const STARCLOUD_FRAG = /* glsl */ `
+varying vec3 vColor;
+varying float vAlpha;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  if (vAlpha <= 0.0) discard;
+  #include <logdepthbuf_fragment>
+  vec2 d = gl_PointCoord - 0.5;
+  float r = length(d) * 2.0;
+  float a = smoothstep(1.0, 0.25, r) * vAlpha;
+  gl_FragColor = vec4(vColor, a);
 }
 `;

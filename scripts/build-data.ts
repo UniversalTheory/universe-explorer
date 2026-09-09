@@ -4,7 +4,7 @@
  *
  *   - JPL Horizons (moon osculating elements -> fitted mean elements, spacecraft state vectors)
  *   - JPL Small-Body Database (comet / asteroid / dwarf-planet elements + physical data)
- *   - HYG star database v4.1 (CC BY-SA 4.0) -> bright-star binary
+ *   - HYG v4.1 + AT-HYG v4.0 star databases (CC BY-SA 4.0) -> star binaries (standard + deep tier)
  *   - Celestrak TLEs for ISS and Hubble
  *
  * Usage: npm run data:build [-- --only=moons,spacecraft,smallbodies,stars,tle]
@@ -407,41 +407,170 @@ async function buildSmallBodies() {
 // ---------------------------------------------------------------------------
 // Stars: HYG v4.1 -> [ra, dec, mag, ci, dist] float32 + names.
 // ---------------------------------------------------------------------------
-async function buildStars() {
-  const cache = 'node_modules/.cache/hygdata_v40.csv';
-  let csv: string;
-  if (existsSync(cache)) csv = readFileSync(cache, 'utf8');
-  else {
-    console.log('downloading HYG…');
-    const r = await fetch('https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v40.csv.gz');
-    csv = gunzipSync(Buffer.from(await r.arrayBuffer())).toString('utf8');
-    mkdirSync('node_modules/.cache', { recursive: true });
-    writeFileSync(cache, csv);
-  }
+// ---------------------------------------------------------------------------
+// Stars: HYG v4.1 (standard tier, bundled) + AT-HYG v4.0 mag < 10 (deep tier, on demand).
+// Both CC BY-SA 4.0 (astronexus). Binary layout documented in src/ephemeris/stars.ts.
+
+const STAR_STRIDE = 10;
+const HYG_URL = 'https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/CURRENT/hygdata_v41.csv';
+const ATHYG_URL = 'https://codeberg.org/astronexus/athyg/media/branch/main/data/subsets/athyg_40_reduced_m10.csv.gz';
+const PC_KM = 3.0856775814913673e13;
+const YEAR_S = 365.25 * 86400;
+const MAS_TO_RAD = 1e-3 / 206264.806247;
+
+/** Catalogue keys (src/data/stars.ts) -> how to find the star in HYG, or inline data for stars HYG lacks. */
+type StarKey = { hip: number } | { gl: string } | { inline: { name: string; ra: number; dec: number; dist: number; mag: number; ci: number; pmra: number; pmdec: number; rv: number } };
+const STAR_KEYS: Record<string, StarKey> = {
+  proxima: { hip: 70890 }, 'alpha-cen-a': { hip: 71683 }, 'alpha-cen-b': { hip: 71681 }, barnard: { hip: 87937 }, wolf359: { gl: 'Gl 406' },
+  lalande21185: { hip: 54035 }, sirius: { hip: 32349 }, 'luyten726-8': { gl: 'Gl 65A' }, ross154: { hip: 92403 }, ross248: { gl: 'Gl 905' },
+  'epsilon-eri': { hip: 16537 }, lacaille9352: { hip: 114046 }, ross128: { hip: 57548 }, '61cyg-a': { hip: 104214 }, '61cyg-b': { hip: 104217 },
+  procyon: { hip: 37279 }, groombridge34: { hip: 1475 }, 'epsilon-ind': { hip: 108870 }, 'tau-ceti': { hip: 8102 }, gj1061: { gl: 'GJ 1061' },
+  luyten: { hip: 36208 }, kapteyn: { hip: 24186 }, lacaille8760: { hip: 105090 }, kruger60: { hip: 110893 }, wolf1061: { hip: 80824 },
+  gliese876: { hip: 113020 }, keid: { hip: 19849 }, vanmaanen: { hip: 3829 },
+  teegarden: { inline: { name: "Teegarden's Star", ra: 43.2540, dec: 16.8815, dist: 3.831, mag: 15.13, ci: 2.0, pmra: 3429.1, pmdec: -3805.5, rv: 68.3 } },
+  trappist1: { inline: { name: 'TRAPPIST-1', ra: 346.6224, dec: -5.0414, dist: 12.43, mag: 18.8, ci: 2.2, pmra: 930.9, pmdec: -479.4, rv: -54.0 } },
+  luhman16: { inline: { name: 'Luhman 16', ra: 162.3286, dec: -53.3195, dist: 1.996, mag: 16.2, ci: 2.3, pmra: -2759.0, pmdec: 354.0, rv: 20.0 } },
+  wise0855: { inline: { name: 'WISE 0855−0714', ra: 133.7862, dec: -7.2447, dist: 2.28, mag: 25.0, ci: 2.5, pmra: -8118.0, pmdec: 684.0, rv: 0.0 } },
+  vega: { hip: 91262 }, arcturus: { hip: 69673 }, capella: { hip: 24608 }, rigel: { hip: 24436 }, betelgeuse: { hip: 27989 }, altair: { hip: 97649 },
+  aldebaran: { hip: 21421 }, antares: { hip: 80763 }, spica: { hip: 65474 }, pollux: { hip: 37826 }, fomalhaut: { hip: 113368 }, deneb: { hip: 102098 },
+  regulus: { hip: 49669 }, castor: { hip: 36850 }, canopus: { hip: 30438 }, achernar: { hip: 7588 }, hadar: { hip: 68702 }, acrux: { hip: 60718 },
+  mimosa: { hip: 62434 }, gacrux: { hip: 61084 }, bellatrix: { hip: 25336 }, alnilam: { hip: 26311 }, alnitak: { hip: 26727 }, mintaka: { hip: 25930 },
+  saiph: { hip: 27366 }, polaris: { hip: 11767 }, algol: { hip: 14576 }, mira: { hip: 10826 }, alcyone: { hip: 17702 }, dubhe: { hip: 54061 },
+  alioth: { hip: 62956 }, alkaid: { hip: 67301 }, mizar: { hip: 65378 }, rasalhague: { hip: 86032 }, denebola: { hip: 57632 }, algieba: { hip: 50583 },
+  elnath: { hip: 25428 }, alhena: { hip: 31681 }, adhara: { hip: 33579 }, wezen: { hip: 34444 }, shaula: { hip: 85927 }, 'kaus-australis': { hip: 90185 },
+  nunki: { hip: 92855 }, alnair: { hip: 109268 }, peacock: { hip: 100751 }, markab: { hip: 113963 }, enif: { hip: 107315 }, scheat: { hip: 113881 },
+  alpheratz: { hip: 677 }, mirach: { hip: 5447 }, almach: { hip: 9640 }, hamal: { hip: 9884 }, menkar: { hip: 14135 }, diphda: { hip: 3419 },
+  'eta-carinae': { hip: 93308 }, 'rho-cas': { hip: 117863 }, 'vy-cma': { hip: 35793 }, 'mu-cep': { hip: 107259 },
+  '51peg': { hip: 113357 }, hd209458: { hip: 108859 }, gliese581: { hip: 74995 }, hd189733: { hip: 98505 }, 'zeta-oph': { hip: 81377 },
+  'delta-cep': { hip: 110991 }, 'rr-lyr': { hip: 95497 }, 'epsilon-aur': { hip: 23416 }, sadr: { hip: 100453 }, albireo: { hip: 95947 },
+  thuban: { hip: 68756 }, kochab: { hip: 72607 }, alphard: { hip: 46390 }, 'mu-ara': { hip: 86796 }, 'upsilon-and': { hip: 7513 }, '47uma': { hip: 53721 },
+  '55cnc': { hip: 43587 }, 'beta-pic': { hip: 27321 }, 'au-mic': { hip: 102409 }, hr8799: { hip: 114189 }, gliese436: { hip: 57087 }, naos: { hip: 39429 },
+  'gamma-vel': { hip: 39953 }, sargas: { hip: 86228 }, 'gamma-cep': { hip: 116727 }, 'cor-caroli': { hip: 63125 },
+};
+/** Corrections to HYG rows (HYG clamps proper motions at 9999.99 mas/yr and carries a few bad Hipparcos parallaxes). */
+const STAR_OVERRIDES: Record<number, Partial<{ dist: number; pmra: number; pmdec: number; rv: number; mag: number }>> = {
+  87937: { pmra: -798.58, pmdec: 10328.12, rv: -110.5 },   // Barnard's Star
+  93308: { dist: 2300, mag: 4.4 },                          // Eta Carinae (Hipparcos parallax unusable)
+  107259: { dist: 940 },                                    // Mu Cephei
+  117863: { dist: 3400 },                                   // Rho Cassiopeiae
+  35793: { dist: 1170 },                                    // VY Canis Majoris
+};
+/** Naked-eye stars without a usable parallax are placed here and flagged. */
+const PLACEHOLDER_PC = 1000;
+
+interface StarRow { ra: number; dec: number; dist: number; pmra: number; pmdec: number; rv: number; mag: number; ci: number; hip: number; flags: number; name: string; key?: string }
+
+function starFloats(r: StarRow, out: Float32Array, o: number) {
+  const ra = r.ra * DEG, dec = r.dec * DEG;
+  const cr = Math.cos(ra), sr = Math.sin(ra), cd = Math.cos(dec), sd = Math.sin(dec);
+  const u = [cd * cr, cd * sr, sd];              // radial
+  const e = [-sr, cr, 0];                        // east
+  const n = [-sd * cr, -sd * sr, cd];            // north
+  const vr = (r.rv * YEAR_S) / PC_KM;            // pc/yr
+  const ve = r.pmra * MAS_TO_RAD * r.dist, vn = r.pmdec * MAS_TO_RAD * r.dist;
+  out[o] = u[0] * r.dist; out[o + 1] = u[1] * r.dist; out[o + 2] = u[2] * r.dist;
+  out[o + 3] = u[0] * vr + e[0] * ve + n[0] * vn;
+  out[o + 4] = u[1] * vr + e[1] * ve + n[1] * vn;
+  out[o + 5] = u[2] * vr + e[2] * ve + n[2] * vn;
+  out[o + 6] = r.mag; out[o + 7] = r.ci; out[o + 8] = r.hip; out[o + 9] = r.flags;
+}
+
+function parseCsv(csv: string): { head: string[]; rows: string[][] } {
   const lines = csv.split('\n');
   const unq = (v: string) => v.replace(/^"|"$/g, '');
   const head = lines[0].split(',').map(unq);
+  const rows: string[][] = [];
+  for (let k = 1; k < lines.length; k++) {
+    if (!lines[k]) continue;
+    const f = lines[k].split(',').map(unq);
+    if (f.length >= head.length) rows.push(f);
+  }
+  return { head, rows };
+}
+
+async function buildStars() {
+  const cache = 'node_modules/.cache/hygdata_v41.csv';
+  if (!existsSync(cache)) {
+    console.log('downloading HYG v4.1…');
+    writeFileSync(cache, await fetchText(HYG_URL));
+  }
+  const { head, rows } = parseCsv(readFileSync(cache, 'utf8'));
   const col = (n: string) => head.indexOf(n);
   const cRa = col('ra'), cDec = col('dec'), cMag = col('mag'), cCi = col('ci'), cDist = col('dist'), cProper = col('proper'), cBayer = col('bayer'), cCon = col('con'), cId = col('id');
-  const rows: { ra: number; dec: number; mag: number; ci: number; dist: number; name: string }[] = [];
-  for (let k = 1; k < lines.length; k++) {
-    const f = lines[k].split(',').map(unq);
-    if (f.length < head.length) continue;
+  const cHip = col('hip'), cGl = col('gl'), cPmra = col('pmra'), cPmdec = col('pmdec'), cRv = col('rv');
+  const byHip = new Map<number, StarRow>(), byGl = new Map<string, StarRow>();
+  const wantedGl = new Set(Object.values(STAR_KEYS).map((k) => ('gl' in k ? k.gl : '')).filter(Boolean));
+  const out: StarRow[] = [];
+  for (const f of rows) {
     if (f[cId] === '0') continue; // the Sun
     const mag = +f[cMag];
+    const hip = +f[cHip] || 0;
+    let dist = +f[cDist];
+    const ov = STAR_OVERRIDES[hip];
+    let flags = 0;
+    if (ov?.dist) dist = ov.dist;
+    if (!(dist > 0 && dist < 100000)) {
+      if (mag > 6.5) continue;
+      dist = PLACEHOLDER_PC; flags |= 1;
+    }
     const proper = f[cProper];
-    if (mag > 6.5 && !proper) continue;
+    const gl = f[cGl].trim();
+    if (mag > 6.5 && !proper && !hip && !wantedGl.has(gl)) continue;
     let name = proper;
     if (!name && mag < 3.0 && f[cBayer]) name = `${f[cBayer]} ${f[cCon]}`;
-    rows.push({ ra: +f[cRa] * 15, dec: +f[cDec], mag, ci: +f[cCi] || 0, dist: +f[cDist], name });
+    const r: StarRow = {
+      ra: +f[cRa] * 15, dec: +f[cDec], dist, pmra: ov?.pmra ?? (+f[cPmra] || 0), pmdec: ov?.pmdec ?? (+f[cPmdec] || 0), rv: ov?.rv ?? (+f[cRv] || 0),
+      mag: ov?.mag ?? mag, ci: +f[cCi] || 0, hip, flags, name,
+    };
+    out.push(r);
+    if (hip) byHip.set(hip, r);
+    if (gl) byGl.set(gl, r);
   }
-  rows.sort((a, b) => a.mag - b.mag);
-  const buf = new Float32Array(rows.length * 5);
-  rows.forEach((r, i) => buf.set([r.ra, r.dec, r.mag, r.ci, r.dist], i * 5));
+  // Curated keys.
+  for (const [key, how] of Object.entries(STAR_KEYS)) {
+    let r: StarRow | undefined;
+    if ('hip' in how) r = byHip.get(how.hip);
+    else if ('gl' in how) r = byGl.get(how.gl);
+    else { const i = how.inline; r = { ...i, hip: 0, flags: 0 }; out.push(r); }
+    if (!r) throw new Error(`star key ${key} not found in HYG`);
+    if (r.key) throw new Error(`star key ${key} duplicates ${r.key}`);
+    r.key = key;
+  }
+  out.sort((a, b) => a.mag - b.mag);
+  const buf = new Float32Array(out.length * STAR_STRIDE);
+  out.forEach((r, i) => starFloats(r, buf, i * STAR_STRIDE));
   writeFileSync(`${OUT}/stars.bin`, Buffer.from(buf.buffer));
-  const names = rows.map((r, i) => (r.name ? [i, r.name] : null)).filter(Boolean);
-  console.log(`stars: ${rows.length} (${names.length} named)`);
-  return { file: 'stars.bin', count: rows.length, stride: 5, names };
+  const names = out.map((r, i) => (r.name ? [i, r.name] : null)).filter(Boolean) as [number, string][];
+  const keys: Record<string, number> = {};
+  out.forEach((r, i) => { if (r.key) keys[r.key] = i; });
+  console.log(`stars: ${out.length} (${names.length} named, ${Object.keys(keys).length} keyed, ${out.filter((r) => r.flags & 1).length} without distance)`);
+
+  // Deep tier: AT-HYG stars not already in HYG (Tycho-2 + Gaia DR3 distances), mag < 10.
+  const deepCache = 'node_modules/.cache/athyg_40_reduced_m10.csv.gz';
+  if (!existsSync(deepCache)) {
+    console.log('downloading AT-HYG m10 subset…');
+    const r = await fetch(ATHYG_URL, { headers: { 'User-Agent': 'UniverseExplorer/0.1 (data pipeline)' } });
+    if (!r.ok) throw new Error(`AT-HYG HTTP ${r.status}`);
+    writeFileSync(deepCache, Buffer.from(await r.arrayBuffer()));
+  }
+  const at = parseCsv(gunzipSync(readFileSync(deepCache)).toString('utf8'));
+  const ac = (n: string) => at.head.indexOf(n);
+  const aHyg = ac('hyg'), aRa = ac('ra'), aDec = ac('dec'), aDist = ac('dist'), aMag = ac('mag'), aCi = ac('ci'), aPmra = ac('pmra'), aPmdec = ac('pmdec'), aRv = ac('rv');
+  const deep: StarRow[] = [];
+  for (const f of at.rows) {
+    if (f[aHyg]) continue;                        // already in the standard tier
+    const dist = +f[aDist];
+    if (!(dist > 0 && dist < 100000)) continue;
+    const mag = +f[aMag];
+    if (!isFinite(mag)) continue;
+    deep.push({ ra: +f[aRa] * 15, dec: +f[aDec], dist, pmra: +f[aPmra] || 0, pmdec: +f[aPmdec] || 0, rv: +f[aRv] || 0, mag, ci: +f[aCi] || 0.6, hip: 0, flags: 0, name: '' });
+  }
+  deep.sort((a, b) => a.mag - b.mag);
+  const dbuf = new Float32Array(deep.length * STAR_STRIDE);
+  deep.forEach((r, i) => starFloats(r, dbuf, i * STAR_STRIDE));
+  writeFileSync(`${OUT}/stars-deep.bin`, Buffer.from(dbuf.buffer));
+  console.log(`deep stars: ${deep.length}`);
+  return { file: 'stars.bin', count: out.length, stride: STAR_STRIDE, names, keys, deep: { file: 'stars-deep.bin', count: deep.length } };
 }
 
 // ---------------------------------------------------------------------------

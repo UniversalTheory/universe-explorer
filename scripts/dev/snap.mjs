@@ -1,11 +1,16 @@
 // Dev helper: open the app in the installed Edge via Playwright, run optional actions, screenshot, dump console.
 // usage: node scripts/dev/snap.mjs <out.png> [--mobile] [--hash=earth] [--wait=ms] [--click=x,y] [--eval=js]
 import { chromium } from 'playwright-core';
+import { existsSync } from 'node:fs';
 const args = process.argv.slice(2);
 const out = args[0] ?? 'shot.png';
 const opt = (k) => (args.find((a) => a.startsWith(`--${k}=`)) ?? '').split('=').slice(1).join('=');
 const mobile = args.includes('--mobile');
-const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// Any installed Chromium-based browser works (SNAP_BROWSER=/path overrides): Edge, Brave, Chrome, Chromium.
+const CANDIDATES = [process.env.SNAP_BROWSER, '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium'].filter(Boolean);
+const executablePath = CANDIDATES.find((p) => existsSync(p));
+if (!executablePath) { console.error('No Chromium-based browser found; set SNAP_BROWSER=/path/to/binary'); process.exit(1); }
+const browser = await chromium.launch({ executablePath, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const ctx = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 }, deviceScaleFactor: 1, isMobile: mobile, hasTouch: mobile });
 const page = await ctx.newPage();
 const logs = [];

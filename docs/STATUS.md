@@ -60,3 +60,28 @@
 - Zoom out: nearby stars with real distances (HYG has parallaxes), exoplanet systems, then the Milky Way
   structure and beyond. Needs a hierarchical coordinate system (heliocentric km → parsecs) and streamed data
   from a CDN rather than the Pages bundle.
+
+# Phase 2 — Milky Way (started 2026-09-09)
+
+Stage progress (see `DECISIONS.md` P11–P14 for the scope):
+
+| Stage | Status |
+| --- | --- |
+| A · Foundations (units hook, far plane, zoom range, scale bar, zoom ladder, unit-aware formatting, catalogue kinds) | done 2026-09-09; verified by headless screenshots at 1e13–1e18 km and `npm test` |
+| B · 3D stars (108k-star standard tier + 221k deep tier, proper motion, star spheres, 115 curated stars, star search) | done 2026-09-09; `scripts/dev/stars-check.ts` passes, screenshots at 50 ly, Sirius, Proxima |
+| C · Exoplanets | next |
+| D · Deep sky | planned |
+| E · Compact objects | planned |
+| F · Galaxy model | planned |
+| G · Polish & docs | planned |
+
+Known issues introduced or exposed by Stage A:
+- In true-scale mode at stellar distances the stacked planet marker sprites form a white blob at the Sun's
+  position; Stage B will hide Solar System markers beyond a distance threshold.
+- The Galaxy ladder step still shows the ESO panorama sphere around a lone Sun; the 3D galaxy model and the
+  panorama cross-fade are Stage F.
+- Star spheres use the Sun's surface texture tinted by colour; hot stars therefore show Sun-like granulation.
+  Sirius B, Procyon B, Alpha Centauri's binary motion and other companions wait for the binary-orbit machinery
+  of Stages C/E. Alpha Centauri A and B are placed at HYG's identical distance, so their true separation is not shown.
+- 204 naked-eye stars have no usable parallax in HYG; they sit at 1,000 pc and the info panel says so.
+

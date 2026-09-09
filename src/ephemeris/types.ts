@@ -28,6 +28,14 @@ export interface EphemerisData {
   moons: Record<string, FittedMoonElements>;
   smallBodies: Record<string, SmallBodyRecord>;
   spacecraft: Record<string, SpacecraftIndex>;
-  stars: { file: string; count: number; stride: number; names: [number, string][] };
+  stars: {
+    file: string; count: number; stride: number;
+    /** [index, name] for stars with a proper name (or Bayer letter when bright). */
+    names: [number, string][];
+    /** Catalogue key (src/data/stars.ts) -> index. */
+    keys: Record<string, number>;
+    /** On-demand deep tier (AT-HYG stars not in HYG). */
+    deep?: { file: string; count: number };
+  };
   tle: { fetched: string } & Record<string, string[]>;
 }

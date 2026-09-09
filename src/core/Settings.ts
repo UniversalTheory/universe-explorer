@@ -8,21 +8,30 @@ export interface SettingsState {
   spacecraft: boolean;
   belts: boolean;
   stars: boolean;
+  /** Load the on-demand deep star tier (AT-HYG, ~9 MB) when leaving the Solar System. */
+  deepStars: boolean;
   quality: 'auto' | 'high' | 'low';
 }
 
 const DEFAULTS: SettingsState = {
-  scaleMode: 'visual', orbits: true, labels: true, moons: true, smallBodies: true, spacecraft: true, belts: true, stars: true, quality: 'auto',
+  scaleMode: 'visual', orbits: true, labels: true, moons: true, smallBodies: true, spacecraft: true, belts: true, stars: true, deepStars: true, quality: 'auto',
 };
 const KEY = 'universe-explorer.settings.v1';
 
 export class Settings {
   state: SettingsState;
+  /** Keys the user has set explicitly (persisted). */
+  readonly saved: Set<string>;
   private listeners = new Set<(s: SettingsState, key: keyof SettingsState) => void>();
   constructor() {
     let saved: Partial<SettingsState> = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { /* ignore */ }
     this.state = { ...DEFAULTS, ...saved };
+    this.saved = new Set(Object.keys(saved));
+  }
+  /** Change a default without persisting it, unless the user already chose a value. */
+  applyDefault<K extends keyof SettingsState>(k: K, v: SettingsState[K]) {
+    if (!this.saved.has(k)) this.state[k] = v;
   }
   get<K extends keyof SettingsState>(k: K): SettingsState[K] { return this.state[k]; }
   set<K extends keyof SettingsState>(k: K, v: SettingsState[K]) {

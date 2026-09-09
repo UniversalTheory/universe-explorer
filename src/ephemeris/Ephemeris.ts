@@ -15,6 +15,7 @@ import { Trajectory } from './spacecraft';
 import { Satellite } from './tle';
 import { elementsFromState } from './orbit-elements';
 import type { EphemerisData } from './types';
+import { StarCatalog } from './stars';
 
 const ZERO: OrbitState = { pos: [0, 0, 0], vel: [0, 0, 0] };
 
@@ -36,6 +37,8 @@ export class Ephemeris {
     readonly data: EphemerisData,
     readonly trajectories: Map<string, Trajectory>,
     readonly satellites: Map<string, Satellite>,
+    /** Star catalogue; scripts that only need Solar System bodies may omit it. */
+    readonly stars: StarCatalog = new StarCatalog(new ArrayBuffer(0)),
   ) {}
 
   static async load(base = 'data/'): Promise<Ephemeris> {
@@ -49,8 +52,12 @@ export class Ephemeris {
     );
     const satellites = new Map<string, Satellite>();
     for (const [id, tle] of Object.entries(data.tle ?? {})) if (Array.isArray(tle)) satellites.set(id, new Satellite(tle));
-    return new Ephemeris(data, trajectories, satellites);
+    const stars = new StarCatalog(await (await fetch(base + data.stars.file)).arrayBuffer(), data.stars.stride);
+    return new Ephemeris(data, trajectories, satellites, stars);
   }
+
+  /** Index into the star catalogue for a catalogue key, if present. */
+  starIndex(key: string): number | undefined { return this.data.stars.keys?.[key]; }
 
   /** Whether this body has ephemeris data available. */
   available(def: BodyDef): boolean {
@@ -60,6 +67,7 @@ export class Ephemeris {
       case 'sbdb': return !!this.data.smallBodies?.[s.key];
       case 'spacecraft': return this.trajectories.has(s.key);
       case 'tle': return this.satellites.has(s.key);
+      case 'star': return this.starIndex(s.key) !== undefined;
       default: return true;
     }
   }
@@ -92,6 +100,11 @@ export class Ephemeris {
     const s = def.source;
     switch (s.kind) {
       case 'sun': return ZERO;
+      case 'fixed': return { pos: [s.pos[0], s.pos[1], s.pos[2]], vel: [0, 0, 0] };
+      case 'star': {
+        const i = this.starIndex(s.key);
+        return i === undefined ? null : this.stars.state(i, t.tt / 365.25);
+      }
       case 'planet': return planetState(s.aeBody, t.astro);
       case 'moon-ae': return moonGeoState(t.astro);
       case 'galilean': {
@@ -148,7 +161,7 @@ export class Ephemeris {
     const def = body(id);
     const s = def.source;
     switch (s.kind) {
-      case 'sun': return null;
+      case 'sun': case 'fixed': case 'star': return null;
       case 'moon': {
         const el = this.data.moons?.[s.key];
         return el ? { points: moonOrbitPath(el, t.jd, t.tt), relativeTo: def.parent! } : null;
@@ -177,6 +190,7 @@ export class Ephemeris {
   /** Osculating orbital period in days, if bound. */
   periodDays(id: string, t: SimTime): number | null {
     const def = body(id);
+    if (def.source.kind === 'fixed' || def.source.kind === 'star') return null;
     const rel = this.relative(id, t);
     if (!rel) return null;
     const gm = GM[def.parent ?? 'sun'] ?? GM.sun;

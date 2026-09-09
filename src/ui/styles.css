@@ -81,6 +81,18 @@ button { font: inherit; color: inherit; }
 .spacer { flex: 1; }
 .topbar .actions { display: flex; gap: 6px; padding: 4px; }
 
+/* Zoom ladder (Solar System / Stars / Galaxy) ---------------------------------- */
+.ladder { display: flex; gap: 2px; padding: 4px; }
+.ladder button { padding: 6px 11px; border: 1px solid transparent; border-radius: 9px; background: transparent; cursor: pointer; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.ladder button:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.ladder button.on { background: rgba(143,196,255,0.18); border-color: rgba(143,196,255,0.4); color: var(--text); }
+
+/* Scale bar --------------------------------------------------------------------- */
+.scalebar { position: absolute; right: 12px; bottom: calc(14px + var(--safe-bottom)); padding: 8px 12px 9px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
+.scalebar[hidden] { display: none; }
+.scalebar .bar { height: 5px; border: 1.5px solid rgba(255,255,255,0.8); border-top: none; min-width: 12px; transition: width 0.12s; }
+.scalebar .txt { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
+
 /* Time bar ------------------------------------------------------------------ */
 .timebar {
   position: absolute; left: 50%; bottom: calc(14px + var(--safe-bottom)); transform: translateX(-50%);
@@ -171,10 +183,15 @@ button { font: inherit; color: inherit; }
   .brand { padding: 8px 10px; }
   .search { max-width: none; }
   .panel, .settings { top: auto; bottom: calc(70px + var(--safe-bottom)); left: 8px; right: 8px; width: auto; max-height: 52vh; }
+  .settings { overflow: auto; overscroll-behavior: contain; }
   .panel.events { left: 8px; }
   .timebar .datetime { min-width: 150px; }
   .timebar .rate { font-size: 10.5px; }
   .hint { display: none; }
   .next-event { display: none; }
+  .topbar { flex-wrap: wrap; }
+  .topbar .ladder { order: 10; margin-top: 2px; }
+  .scalebar { bottom: calc(72px + var(--safe-bottom)); right: 8px; padding: 6px 10px 7px; }
+  .scalebar .txt { font-size: 10.5px; }
   .stats { grid-template-columns: 1fr 1fr; }
 }

@@ -1,9 +1,27 @@
-import { AU_KM } from '@/ephemeris/frames';
+import { AU_KM, LY_KM, PC_KM } from '@/ephemeris/frames';
 
+/** Distance with the unit that suits its size: km → AU → light-years (with parsecs). */
 export function fmtKm(km: number): string {
   if (!isFinite(km)) return '—';
+  if (km > 0.1 * LY_KM) {
+    const ly = km / LY_KM, pc = km / PC_KM;
+    const lyS = ly < 10 ? ly.toFixed(2) : ly < 1000 ? ly.toFixed(1) : fmtBig(ly);
+    const pcS = pc >= 1000 ? `${(pc / 1000).toPrecision(3)} kpc` : `${pc < 10 ? pc.toFixed(2) : pc.toFixed(1)} pc`;
+    return `${lyS} ly · ${pcS}`;
+  }
   if (km > 0.05 * AU_KM) return `${(km / AU_KM).toFixed(km / AU_KM < 10 ? 3 : 2)} AU · ${fmtBig(km)} km`;
   return `${fmtBig(km)} km`;
+}
+/** Light travel time from seconds, up to years. */
+export function fmtLightTime(s: number): string {
+  if (!isFinite(s)) return '—';
+  if (s < 1) return `${(s * 1000).toFixed(0)} ms`;
+  if (s < 120) return `${s.toFixed(1)} s`;
+  if (s < 7200) return `${(s / 60).toFixed(1)} min`;
+  if (s < 86400 * 2) return `${(s / 3600).toFixed(2)} h`;
+  if (s < 86400 * 365.25 * 0.5) return `${(s / 86400).toFixed(1)} days`;
+  const yr = s / (86400 * 365.25);
+  return `${yr < 100 ? yr.toFixed(1) : fmtBig(yr)} years`;
 }
 export function fmtBig(x: number, digits = 3): string {
   if (!isFinite(x)) return '—';

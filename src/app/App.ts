@@ -5,7 +5,7 @@ import { Settings } from '@/core/Settings';
 import { vdot, vlen, vnorm, vscale, vsub, type Vec3 } from '@/core/math3';
 import { BODIES, body, type BodyDef } from '@/data/catalog';
 import { Ephemeris } from '@/ephemeris/Ephemeris';
-import { AU_KM, C_KM_S } from '@/ephemeris/frames';
+import { AU_KM, C_KM_S, GAL_CENTRE_ECL, GAL_NORTH_ECL, LY_KM, eclToThree } from '@/ephemeris/frames';
 import { EventService } from '@/events/EventService';
 import type { SkyEvent } from '@/events/types';
 import { CameraController, type FocusTarget } from '@/render/CameraController';
@@ -17,8 +17,9 @@ import { EventsPanel } from '@/ui/EventsPanel';
 import { InfoPanel } from '@/ui/InfoPanel';
 import { SettingsPanel } from '@/ui/SettingsPanel';
 import { TimeBar } from '@/ui/TimeBar';
-import { TopBar } from '@/ui/TopBar';
-import { fmtDays, fmtDate, fmtHours, fmtKm, fmtMass, fmtBig } from '@/ui/format';
+import { TopBar, ZOOM_VIEWS, type ZoomView } from '@/ui/TopBar';
+import { ScaleBar } from '@/ui/ScaleBar';
+import { fmtDays, fmtDate, fmtHours, fmtKm, fmtLightTime, fmtMass, fmtBig } from '@/ui/format';
 
 const ZERO = new THREE.Vector3();
 
@@ -35,6 +36,7 @@ export class App {
   private info: InfoPanel;
   private eventsPanel: EventsPanel;
   private settingsPanel: SettingsPanel;
+  private scaleBar: ScaleBar;
   private hint: HTMLElement;
   private selectedId: string | null = null;
   private lastClick = { id: '', t: 0 };
@@ -56,18 +58,19 @@ export class App {
     const pr = Math.min(devicePixelRatio || 1, quality === 'high' ? 2 : 1.5);
     renderer.setPixelRatio(pr);
     configureTextures(renderer);
-    const starfield = new Starfield(pr);
-    const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load('data/')]);
+    const starfield = new Starfield();
+    const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load()]);
     return new App(renderer, eph, starfield, quality, pr);
   }
 
   constructor(renderer: THREE.WebGLRenderer, readonly eph: Ephemeris, readonly starfield: Starfield, readonly quality: 'high' | 'low', pixelRatio: number) {
     this.renderer = renderer;
     this.pixelRatio = pixelRatio;
+    this.settings.applyDefault('deepStars', quality === 'high');
     this.universe = new Universe(eph, quality, pixelRatio);
     const hud = document.getElementById('hud')!;
     this.labels = new Labels(document.getElementById('labels')!);
-    this.labels.onSelect = (id) => this.select(id);
+    this.labels.onSelect = (id) => { if (!id.startsWith('star:')) this.select(id); };
 
     this.cam = new CameraController(renderer.domElement, this.target('sun'));
     this.cam.theta = 0.9; this.cam.phi = 0.42; this.cam.distance = 5.6 * AU_KM;
@@ -79,8 +82,10 @@ export class App {
       onSelect: (id) => { this.select(id); this.flyTo(id); },
       onToggleEvents: () => { this.eventsPanel.toggle(); this.settingsPanel.hide(); this.syncButtons(); },
       onToggleSettings: () => { this.settingsPanel.toggle(); this.eventsPanel.hide(); this.syncButtons(); },
+      onJump: (view) => this.jumpTo(view),
     });
     this.timeBar = new TimeBar(hud, this.clock);
+    this.scaleBar = new ScaleBar(hud);
     this.info = new InfoPanel(hud, { onFly: (id) => this.flyTo(id), onSelect: (id) => { this.select(id); this.flyTo(id); }, onClose: () => this.deselect() });
     this.eventsPanel = new EventsPanel(hud, { onJump: (ev) => this.jumpToEvent(ev) });
     this.settingsPanel = new SettingsPanel(hud, this.settings);
@@ -124,6 +129,7 @@ export class App {
   // --- Interaction ------------------------------------------------------------
   private handleClick(x: number, y: number) {
     const id = this.universe.pick(x, y, this.width, this.height);
+    if (id?.startsWith('star:')) return;
     const now = performance.now();
     if (id) {
       if (this.lastClick.id === id && now - this.lastClick.t < 380) { this.flyTo(id); this.lastClick = { id: '', t: 0 }; return; }
@@ -138,7 +144,7 @@ export class App {
   select(id: string) {
     const def = body(id);
     this.selectedId = id;
-    this.info.show(def, id === 'sun' || (this.universe.bodies.get(id)?.available ?? false));
+    this.info.show(def, this.universe.isAvailable(id));
     this.settingsPanel.hide();
     this.syncButtons();
     this.updateStats();
@@ -156,9 +162,30 @@ export class App {
     this.cam.flyTo(this.target(id), { distance, viewDir: this.litViewDir(id) });
   }
 
+  /**
+   * Jump the camera to one of the canonical framings of the Sun: the planets, the solar
+   * neighbourhood, or the whole Galaxy (seen from above the disc, on the anti-centre side).
+   */
+  jumpTo(view: ZoomView) {
+    const spec = ZOOM_VIEWS.find((v) => v.id === view);
+    if (!spec) return;
+    const fov = (this.cam.camera.fov * Math.PI) / 180;
+    const distance = spec.radius / (0.8 * Math.tan(fov / 2));
+    let viewDir: THREE.Vector3;
+    if (view === 'galaxy') {
+      const n = eclToThree(GAL_NORTH_ECL), c = eclToThree(GAL_CENTRE_ECL);
+      viewDir = new THREE.Vector3(n[0] - 0.7 * c[0], n[1] - 0.7 * c[1], n[2] - 0.7 * c[2]).normalize();
+    } else {
+      const phi = 0.55, cp = Math.cos(phi);
+      viewDir = new THREE.Vector3(cp * Math.sin(this.cam.theta), Math.sin(phi), cp * Math.cos(this.cam.theta));
+    }
+    this.cam.flyTo(this.target('sun'), { distance, viewDir, duration: 2.2 });
+    this.hint.classList.add('fade');
+  }
+
   /** Direction (world axes) from a body toward a pleasing three-quarter-lit viewpoint. */
   private litViewDir(id: string): THREE.Vector3 | undefined {
-    if (id === 'sun') return undefined;
+    if (id === 'sun' || body(id).type === 'star') return undefined;
     const h = this.universe.helioOf(id) ?? this.eph.state(id, this.clock.time)?.pos;
     if (!h) return undefined;
     // Toward the Sun, in Three axes (x, z, -y), rotated ~50° around the pole and raised ~20°.
@@ -193,6 +220,9 @@ export class App {
       case '/': this.topBar.focusSearch(); e.preventDefault(); break;
       case 'Escape': this.deselect(); this.eventsPanel.hide(); this.settingsPanel.hide(); this.syncButtons(); break;
       case 'f': case 'F': if (this.selectedId) this.flyTo(this.selectedId); break;
+      case '1': this.jumpTo('system'); break;
+      case '2': this.jumpTo('stars'); break;
+      case '3': this.jumpTo('galaxy'); break;
     }
   }
 
@@ -223,20 +253,30 @@ export class App {
     u.update(t, dt, this.cam.camera, this.settings.state, this.pxPerRad, this.pixelRatio, this.cam.focusId, this.selectedId);
 
     // Labels + selection ring.
-    const sel = this.selectedId ? (this.selectedId === 'sun' ? u.sun.screen : u.bodies.get(this.selectedId)?.screen) : null;
-    this.labels.update(u.labelEntries(this.width, this.height, this.settings.state, this.cam.focusId), this.width, this.height,
+    const sel = this.selectedId ? u.screenOf(this.selectedId) : null;
+    this.labels.update(u.labelEntries(this.width, this.height, this.settings.state, this.cam.focusId, this.selectedId), this.width, this.height,
       sel && this.selectedId ? { id: this.selectedId, x: sel.x * this.width, y: sel.y * this.height, radiusPx: sel.radiusPx, visible: sel.visible } : null);
 
     // Render: background sky, then the solar system.
     const r = this.renderer;
     r.autoClear = false;
     r.clear();
-    this.starfield.render(r, this.cam.camera, this.settings.state.stars, 1);
+    // The panorama is the sky as seen from here; fade it out between ~1 and ~100 light-years from the Sun
+    // so the 3D star cloud takes over (the galaxy model of Stage F will replace it beyond that).
+    const sunDist = u.sun.group.position.distanceTo(this.cam.camera.position);
+    const fade = 1 - Math.min(1, Math.max(0, Math.log10(Math.max(sunDist, 1) / 1e13) / 2));
+    this.starfield.render(r, this.cam.camera, this.settings.state.stars, 0.85 * (0.15 + 0.85 * fade));
     r.render(u.scene, this.cam.camera);
 
     // UI updates at low frequency (wall-clock).
     this.timeBar.render();
-    if (now - this.statsTimer > 250) { this.statsTimer = now; this.updateStats(); }
+    this.scaleBar.update((2 * this.cam.distance * Math.tan((this.cam.camera.fov * Math.PI) / 360)) / this.height);
+    if (now - this.statsTimer > 250) {
+      this.statsTimer = now;
+      this.updateStats();
+      const d = this.cam.distance;
+      this.topBar.setZoomView(this.cam.focusId === 'sun' ? ZOOM_VIEWS.find((v) => d >= v.min && d < v.max)?.id ?? null : null);
+    }
     if (now - this.eventsTimer > 1000) { this.eventsTimer = now; this.eventsPanel.update(this.clock.ms); this.events.request(this.clock.ms); }
   }
 
@@ -249,13 +289,37 @@ export class App {
     const rows: [string, string, boolean?][] = [];
     const st = this.eph.state(id, t);
     const earth = this.eph.state('earth', t);
+    const isStar = def.type === 'star' && id !== 'sun';
+    if (st && isStar) {
+      const d = vlen(st.pos);
+      rows.push(['Distance from Sun', fmtKm(d), true]);
+      const ly = d / LY_KM;
+      const year = new Date(t.ms).getUTCFullYear() - ly;
+      rows.push(['Light travel time', `${fmtLightTime(d / C_KM_S)} · left the star ${year >= 0 ? `around ${Math.round(year)}` : `${fmtBig(-year)} years BC`}`, true]);
+      rows.push(['Space velocity', `${vlen(st.vel).toFixed(1)} km/s relative to the Sun`, true]);
+      const idx = def.source.kind === 'star' ? this.eph.starIndex(def.source.key) : undefined;
+      if (idx !== undefined) {
+        const cat = this.eph.stars;
+        rows.push(['Apparent magnitude', cat.mag[idx].toFixed(2)]);
+        rows.push(['Absolute magnitude', cat.absMag[idx].toFixed(2)]);
+        if (cat.flags[idx] & 1) rows.push(['Distance', 'not measured; placed at 1,000 pc', true]);
+      }
+      if (def.spectral) rows.push(['Spectral type', def.spectral]);
+      if (def.luminosity != null) rows.push(['Luminosity', def.luminosity >= 100 ? `${fmtBig(def.luminosity)} × Sun` : def.luminosity >= 0.01 ? `${def.luminosity.toPrecision(2)} × Sun` : `${def.luminosity.toExponential(1)} × Sun`]);
+      rows.push(['Radius', `${(def.radius / 695700).toPrecision(3)} × Sun · ${fmtBig(def.radius)} km`, true]);
+      if (def.mass) rows.push(['Mass', `${(def.mass / 1.9885e30).toPrecision(2)} × Sun`]);
+      if (def.temperature) rows.push(['Temperature', def.temperature]);
+      if (def.discovered) rows.push(['Discovered', def.discovered, true]);
+      for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+      this.info.setStats(rows);
+      return;
+    }
     if (st) {
       if (id !== 'sun') rows.push(['Distance from Sun', fmtKm(vlen(st.pos)), true]);
       if (earth && id !== 'earth') {
         const d = vlen(vsub(st.pos, earth.pos));
         rows.push(['Distance from Earth', fmtKm(d), true]);
-        const lt = d / C_KM_S;
-        rows.push(['Light travel time', lt < 1 ? `${(lt * 1000).toFixed(0)} ms` : lt < 120 ? `${lt.toFixed(1)} s` : lt < 7200 ? `${(lt / 60).toFixed(1)} min` : `${(lt / 3600).toFixed(2)} h`]);
+        rows.push(['Light travel time', fmtLightTime(d / C_KM_S)]);
       }
       const rel = this.eph.relative(id, t);
       if (rel && id !== 'sun') rows.push([def.parent ? `Speed around ${def.parent}` : 'Orbital speed', `${vlen(rel.vel).toFixed(2)} km/s`]);

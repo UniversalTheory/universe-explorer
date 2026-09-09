@@ -3,11 +3,23 @@
  * planetary fact sheets / JPL SSD. Orbital state comes from the ephemeris
  * layer, not from here.
  */
-export type BodyType = 'star' | 'planet' | 'dwarf' | 'moon' | 'asteroid' | 'comet' | 'interstellar' | 'spacecraft';
+/**
+ * Solar System kinds, plus the Galaxy-phase kinds: 'star' also covers other stars,
+ * 'exoplanet' orbits a star, 'nebula' / 'cluster' are extended deep-sky objects,
+ * 'blackhole' / 'neutron' are compact objects, 'region' is a schematic structure
+ * (heliopause, Oort cloud, Local Bubble…).
+ */
+import { STARS } from './stars';
+
+export type BodyType =
+  | 'star' | 'planet' | 'dwarf' | 'moon' | 'asteroid' | 'comet' | 'interstellar' | 'spacecraft'
+  | 'exoplanet' | 'nebula' | 'cluster' | 'blackhole' | 'neutron' | 'region';
 
 /** How the ephemeris layer computes this body's position. */
 export type EphemerisSource =
   | { kind: 'sun' }
+  | { kind: 'fixed'; pos: [number, number, number] } // constant heliocentric ECL position, km
+  | { kind: 'star'; key: string }               // star catalogue (stars.bin) with proper motion
   | { kind: 'planet'; aeBody: string }          // astronomy-engine heliocentric body
   | { kind: 'moon-ae'; aeBody: string }         // astronomy-engine geocentric (the Moon)
   | { kind: 'galilean'; index: 0 | 1 | 2 | 3 }  // astronomy-engine JupiterMoons
@@ -60,6 +72,10 @@ export interface BodyDef {
   moons?: number;
   /** Extra static facts. */
   facts?: [string, string][];
+  /** Stars: MK spectral type, bolometric luminosity in solar units, and other names people search for. */
+  spectral?: string;
+  luminosity?: number;
+  aliases?: string[];
 }
 
 const AE = (aeBody: string): EphemerisSource => ({ kind: 'planet', aeBody });
@@ -67,7 +83,7 @@ const MOON = (key: string): EphemerisSource => ({ kind: 'moon', key });
 const SB = (key: string): EphemerisSource => ({ kind: 'sbdb', key });
 const SC = (key: string): EphemerisSource => ({ kind: 'spacecraft', key });
 
-export const BODIES: BodyDef[] = [
+export const SOLAR_SYSTEM: BodyDef[] = [
   {
     id: 'sun', name: 'Sun', type: 'star', radius: 695700, mass: 1.9885e30, rotationHours: 609.12, color: '#ffd27a',
     texture: 'textures/2k_sun.jpg', source: { kind: 'sun' }, gravity: 274, temperature: '5,500 °C surface · 15 million °C core',
@@ -312,6 +328,8 @@ export const BODIES: BodyDef[] = [
     description: 'The telescope that measured the age of the universe and photographed the Pillars of Creation, orbiting 530 km above Earth since 1990.' },
 ];
 
+/** Everything: Solar System bodies first, then the star catalogue (src/data/stars.ts). */
+export const BODIES: BodyDef[] = [...SOLAR_SYSTEM, ...STARS];
 export const BODY_MAP: Map<string, BodyDef> = new Map(BODIES.map((b) => [b.id, b]));
 export const body = (id: string): BodyDef => {
   const b = BODY_MAP.get(id);

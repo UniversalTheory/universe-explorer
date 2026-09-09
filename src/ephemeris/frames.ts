@@ -42,5 +42,23 @@ export function raDecToVec(raDeg: number, decDeg: number): Vec3 {
 
 export const AU_KM = 149597870.7;
 export const C_KM_S = 299792.458;
+/** Julian-year light-year and IAU parsec, km. */
+export const LY_KM = 9.4607304725808e12;
+export const PC_KM = 3.0856775814913673e13;
+export const KPC_KM = PC_KM * 1e3;
+
+/**
+ * Kilometres per Three.js world unit. The whole Milky Way fits in float32 with
+ * km as the unit (positions relative to the floating origin stay < 1e18 km, so
+ * squared lengths stay < 1e36 ≪ 3.4e38). This constant is the single hook for
+ * the extragalactic phase, where a larger unit will be needed; it is 1 today and
+ * radii, camera distances and shader constants still assume 1.
+ */
+export const WORLD_UNIT_KM = 1;
+
+/** Galactic north pole (b = +90°) as a unit vector in ECL. */
+export const GAL_NORTH_ECL: Vec3 = mapply(EQJ_TO_ECL, mapply(GAL_TO_EQJ, [0, 0, 1]));
+/** Direction of the Galactic centre (l = 0, b = 0) as a unit vector in ECL. */
+export const GAL_CENTRE_ECL: Vec3 = mapply(EQJ_TO_ECL, mapply(GAL_TO_EQJ, [1, 0, 0]));
 /** Heliocentric gravitational parameter, km^3/s^2. */
 export const GM_SUN = 1.32712440041279419e11;
