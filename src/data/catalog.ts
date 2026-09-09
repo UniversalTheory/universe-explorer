@@ -20,6 +20,7 @@ export type EphemerisSource =
   | { kind: 'sun' }
   | { kind: 'fixed'; pos: [number, number, number] } // constant heliocentric ECL position, km
   | { kind: 'star'; key: string }               // star catalogue (stars.bin) with proper motion
+  | { kind: 'exoplanet'; key: string }          // NASA Exoplanet Archive planet (exoplanets.bin), Kepler orbit about the parent star
   | { kind: 'planet'; aeBody: string }          // astronomy-engine heliocentric body
   | { kind: 'moon-ae'; aeBody: string }         // astronomy-engine geocentric (the Moon)
   | { kind: 'galilean'; index: 0 | 1 | 2 | 3 }  // astronomy-engine JupiterMoons
@@ -76,6 +77,10 @@ export interface BodyDef {
   spectral?: string;
   luminosity?: number;
   aliases?: string[];
+  /** Renderer objects are created on demand (exoplanet systems) rather than at start-up. */
+  lazy?: boolean;
+  /** Set for auto-generated entries (exoplanet hosts/planets without curated text); search ranks them lower. */
+  generated?: boolean;
 }
 
 const AE = (aeBody: string): EphemerisSource => ({ kind: 'planet', aeBody });
@@ -331,6 +336,14 @@ export const SOLAR_SYSTEM: BodyDef[] = [
 /** Everything: Solar System bodies first, then the star catalogue (src/data/stars.ts). */
 export const BODIES: BodyDef[] = [...SOLAR_SYSTEM, ...STARS];
 export const BODY_MAP: Map<string, BodyDef> = new Map(BODIES.map((b) => [b.id, b]));
+/** Add bodies built from fetched data (exoplanet systems) after start-up; ids must be unique. */
+export function registerBodies(defs: BodyDef[]) {
+  for (const d of defs) {
+    if (BODY_MAP.has(d.id)) continue;
+    BODIES.push(d);
+    BODY_MAP.set(d.id, d);
+  }
+}
 export const body = (id: string): BodyDef => {
   const b = BODY_MAP.get(id);
   if (!b) throw new Error('Unknown body ' + id);

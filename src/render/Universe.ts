@@ -3,7 +3,7 @@
  * ephemeris for the current simulation time and floating origin.
  */
 import * as THREE from 'three';
-import { BODIES, body, type BodyDef } from '@/data/catalog';
+import { BODIES, BODY_MAP, body, type BodyDef } from '@/data/catalog';
 import type { Ephemeris } from '@/ephemeris/Ephemeris';
 import type { SimTime } from '@/core/time';
 import type { Vec3 } from '@/core/math3';
@@ -16,6 +16,9 @@ import type { LabelEntry } from './Labels';
 import { CometVisual } from './Comet';
 import { WORLD_UNIT_KM } from '@/ephemeris/frames';
 import { StarCloud } from './StarCloud';
+
+/** Exoplanet systems are lit by their own star on this layer (the Sun's light stays on layer 0). */
+export const EXO_LAYER = 1;
 
 /** Beyond this distance from the camera (km, ≈ 27,000 AU) Solar System bodies are sub-pixel and hidden. */
 const FAR_HIDE_KM = 4e12;
@@ -31,7 +34,7 @@ const MIN_PX: Record<string, number> = {
   star: 9, planet: 5.5, dwarf: 3.5, moon: 3.2, asteroid: 2.4, comet: 2.4, interstellar: 2.4, spacecraft: 0,
   exoplanet: 4, nebula: 0, cluster: 0, blackhole: 4, neutron: 3, region: 0,
 };
-const ORBIT_REFRESH_DAYS: Record<string, number> = { planet: 20, dwarf: 30, moon: 0.75, tle: 0.02 };
+const ORBIT_REFRESH_DAYS: Record<string, number> = { planet: 20, dwarf: 30, moon: 0.75, tle: 0.02, exoplanet: 3650 };
 
 interface OrbitEntry { line: OrbitLine; group: THREE.Group; parent: string; lastTT: number; isStatic: boolean }
 
@@ -61,35 +64,15 @@ export class Universe {
     this.sun = new SunObject(body('sun'));
     this.scene.add(this.sun.group);
     for (const def of BODIES) {
-      if (def.id === 'sun') continue;
-      if (!eph.available(def)) continue;
-      if (def.type === 'star') {
-        const so = new SunObject(def, false);
-        this.stars.set(def.id, so);
-        this.scene.add(so.group);
-        continue;
-      }
-      const obj = new BodyObject(def, quality);
-      this.bodies.set(def.id, obj);
-      this.scene.add(obj.group);
-      if (def.type === 'comet' || def.type === 'interstellar') {
-        const cv = new CometVisual(def.color);
-        obj.group.add(cv.group);
-        this.comets.set(def.id, cv);
-      }
-      const parent = def.parent ?? 'sun';
-      const line = new OrbitLine(def.color, def.type === 'spacecraft' ? 0.22 : 0.3);
-      const group = new THREE.Group();
-      group.add(line.line);
-      this.scene.add(group);
-      const src = def.source.kind;
-      this.orbits.set(def.id, { line, group, parent, lastTT: -Infinity, isStatic: src === 'sbdb' || src === 'spacecraft' });
-      if (def.parent) {
-        const arr = this.children.get(def.parent) ?? [];
-        arr.push(def);
-        this.children.set(def.parent, arr);
-      }
+      if (def.id === 'sun' || def.lazy) continue;
+      this.add(def);
     }
+    this.exoLight = new THREE.PointLight(0xffffff, 2.6, 0, 0);
+    this.exoLight.layers.set(EXO_LAYER);
+    this.scene.add(this.exoLight);
+    const exoAmbient = new THREE.AmbientLight(0xffffff, 0.06);
+    exoAmbient.layers.set(EXO_LAYER);
+    this.scene.add(exoAmbient);
     this.belts = new Belts(pixelRatio);
     this.scene.add(this.belts.group);
     this.starCloud = new StarCloud(eph.stars, pixelRatio);
@@ -101,6 +84,61 @@ export class Universe {
       this.cloudLabels.push({ index, name });
     }
   }
+
+  /** Create the renderer objects for one body (stars become SunObjects, everything else BodyObjects with an orbit line). */
+  private add(def: BodyDef) {
+    if (!this.eph.available(def)) return;
+    if (def.type === 'star') {
+      if (this.stars.has(def.id)) return;
+      const so = new SunObject(def, false);
+      this.stars.set(def.id, so);
+      this.scene.add(so.group);
+      return;
+    }
+    if (this.bodies.has(def.id)) return;
+    const obj = new BodyObject(def, this.quality);
+    this.bodies.set(def.id, obj);
+    this.scene.add(obj.group);
+    if (def.type === 'comet' || def.type === 'interstellar') {
+      const cv = new CometVisual(def.color);
+      obj.group.add(cv.group);
+      this.comets.set(def.id, cv);
+    }
+    if (def.type === 'exoplanet') {
+      obj.group.traverse((o) => o.layers.set(EXO_LAYER));
+      obj.eclipse.uSunRadius.value = def.parent ? body(def.parent).radius : 695700;
+    }
+    const parent = def.parent ?? 'sun';
+    const line = new OrbitLine(def.color, def.type === 'spacecraft' ? 0.22 : 0.3);
+    const group = new THREE.Group();
+    group.add(line.line);
+    this.scene.add(group);
+    const src = def.source.kind;
+    this.orbits.set(def.id, { line, group, parent, lastTT: -Infinity, isStatic: src === 'sbdb' || src === 'spacecraft' });
+    if (def.parent) {
+      const arr = this.children.get(def.parent) ?? [];
+      if (!arr.includes(def)) arr.push(def);
+      this.children.set(def.parent, arr);
+    }
+  }
+
+  /**
+   * Make sure a lazily-defined body (an exoplanet system) has renderer objects: instantiates the
+   * host star and all of its planets together. No-op for bodies created at start-up.
+   */
+  ensure(id: string) {
+    const def = BODY_MAP.get(id);
+    if (!def) return;
+    const hostId = def.type === 'exoplanet' && def.parent ? def.parent : def.id;
+    const host = BODY_MAP.get(hostId);
+    if (!host) return;
+    if (host.lazy) this.add(host);
+    if (this.systemsBuilt.has(hostId)) return;
+    this.systemsBuilt.add(hostId);
+    for (const b of BODIES) if (b.parent === hostId && b.lazy) this.add(b);
+  }
+  private systemsBuilt = new Set<string>();
+  readonly exoLight: THREE.PointLight;
 
   /** Fetch the deep star tier once (on demand). */
   private loadDeepTier() {
@@ -183,7 +221,9 @@ export class Universe {
       obj.setVisible(true);
       obj.setOrientation(this.eph.orientation(id, t));
       const minPx = visual ? MIN_PX[obj.def.type] ?? 3 : 0;
-      obj.update(camPos, sunWorld, minPx / pxPerRad, obj.def.type === 'spacecraft' ? 7 : 4.5, pxPerRad);
+      // Exoplanets are lit by their own star; the eclipse shader takes that star as the light source.
+      const lightPos = obj.def.type === 'exoplanet' && obj.def.parent ? this.worldPosition(obj.def.parent, _light) : sunWorld;
+      obj.update(camPos, lightPos, minPx / pxPerRad, obj.def.type === 'spacecraft' ? 7 : 4.5, pxPerRad);
       const cv = this.comets.get(id);
       if (cv) {
         const st = this.eph.state(id, t);
@@ -204,6 +244,13 @@ export class Universe {
       st.update(camPos, camera.quaternion, 0, pxPerRad, this.elapsed, pixelRatio);
       if (idx !== undefined) this.starCloud.setHidden(idx, st.sphereVisible);
     }
+    // One point light serves the active exoplanet system (the focused or selected one).
+    const activeHost = this.activeExoHost(focusId, selectedId);
+    if (activeHost) {
+      this.worldPosition(activeHost, this.exoLight.position);
+      this.exoLight.color.set(body(activeHost).color).lerp(new THREE.Color(1, 1, 1), 0.5);
+      this.exoLight.visible = true;
+    } else this.exoLight.visible = false;
     this.starCloud.setVisible(settings.stars);
     if (settings.stars) this.starCloud.update(this.origin, t.tt / 365.25, pxPerRad, pixelRatio, 1);
     const sunDist = this.sun.group.position.distanceTo(camPos);
@@ -215,8 +262,21 @@ export class Universe {
     this.project(camera);
   }
 
+  /** The host star whose planets should be lit: that of the focused or selected body, if it is an exoplanet system. */
+  private activeExoHost(focusId: string, selectedId: string | null): string | null {
+    for (const id of [focusId, selectedId]) {
+      if (!id) continue;
+      const d = BODY_MAP.get(id);
+      if (!d) continue;
+      if (d.type === 'exoplanet' && d.parent) return d.parent;
+      if (d.type === 'star' && this.children.get(id)?.length) return id;
+    }
+    return null;
+  }
+
   private typeVisible(def: BodyDef, s: SettingsState): boolean {
     switch (def.type) {
+      case 'exoplanet': return s.exoplanets;
       case 'moon': return s.moons;
       case 'spacecraft': return s.spacecraft;
       case 'asteroid': case 'comet': case 'interstellar': return s.smallBodies;
@@ -255,7 +315,7 @@ export class Universe {
       const def = obj.def;
       const highlighted = id === focusId || id === selectedId;
       // Minor bodies and spacecraft only show their paths when selected or focused.
-      if (!highlighted && def.type !== 'planet' && def.type !== 'dwarf' && def.type !== 'moon') { o.line.setVisible(false); continue; }
+      if (!highlighted && def.type !== 'planet' && def.type !== 'dwarf' && def.type !== 'moon' && def.type !== 'exoplanet') { o.line.setVisible(false); continue; }
       // Position the orbit at its parent.
       this.worldPosition(o.parent, o.group.position);
       // Hide orbits that would be sub-pixel clutter (moon orbits below 12 px; heliocentric ones below 3 px when zoomed out to the stars).
@@ -320,9 +380,9 @@ export class Universe {
         const def = obj.def;
         if (def.parent) {
           // Only label satellites that are visibly separated from their parent.
-          const p = id === 'sun' ? this.sun.screen : this.bodies.get(def.parent)?.screen ?? this.sun.screen;
+          const p = this.screenOf(def.parent) ?? this.sun.screen;
           const sep = Math.hypot((obj.screen.x - p.x) * width, (obj.screen.y - p.y) * height);
-          const parentR = this.bodies.get(def.parent)?.screen.radiusPx ?? 0;
+          const parentR = p.radiusPx ?? 0;
           if (sep < Math.max(18, parentR + 10) && id !== focusId) continue;
         }
         // Skip tiny bodies that are far away unless focused.
@@ -368,6 +428,7 @@ export class Universe {
 }
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _light = new THREE.Vector3();
 const _p3: Vec3 = [0, 0, 0];
 const _anti = new THREE.Vector3();
 const _vel = new THREE.Vector3();

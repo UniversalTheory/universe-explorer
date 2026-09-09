@@ -69,8 +69,8 @@ Stage progress (see `DECISIONS.md` P11–P14 for the scope):
 | --- | --- |
 | A · Foundations (units hook, far plane, zoom range, scale bar, zoom ladder, unit-aware formatting, catalogue kinds) | done 2026-09-09; verified by headless screenshots at 1e13–1e18 km and `npm test` |
 | B · 3D stars (108k-star standard tier + 221k deep tier, proper motion, star spheres, 115 curated stars, star search) | done 2026-09-09; `scripts/dev/stars-check.ts` passes, screenshots at 50 ly, Sirius, Proxima |
-| C · Exoplanets | next |
-| D · Deep sky | planned |
+| C · Exoplanets (6,325 planets / 4,741 hosts from the NASA Exoplanet Archive, lazy systems, own-star lighting, transit-epoch phases, ~90 curated write-ups) | done 2026-09-09; `scripts/dev/exoplanets-check.ts` passes (transit geometry, Kepler consistency) |
+| D · Deep sky | next |
 | E · Compact objects | planned |
 | F · Galaxy model | planned |
 | G · Polish & docs | planned |
@@ -84,4 +84,8 @@ Known issues introduced or exposed by Stage A:
   Sirius B, Procyon B, Alpha Centauri's binary motion and other companions wait for the binary-orbit machinery
   of Stages C/E. Alpha Centauri A and B are placed at HYG's identical distance, so their true separation is not shown.
 - 204 naked-eye stars have no usable parallax in HYG; they sit at 1,000 pc and the info panel says so.
+- Exoplanet orbit orientation on the sky (node) is unmeasured for nearly all systems and drawn at 0°; non-transiting
+  planets without a periastron epoch have an arbitrary phase (both flagged in the panel). Circumbinary planets orbit the
+  archive's single host position. Planet radii come from mass when unmeasured. 28 hosts (35 planets) lack a distance
+  and are omitted. `exoplanets.json` is 0.7 MB (gzips to ~0.15 MB on Pages).
 

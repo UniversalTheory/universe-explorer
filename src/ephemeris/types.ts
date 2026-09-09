@@ -37,5 +37,7 @@ export interface EphemerisData {
     /** On-demand deep tier (AT-HYG stars not in HYG). */
     deep?: { file: string; count: number };
   };
+  /** NASA Exoplanet Archive extract (see src/ephemeris/exoplanets.ts). */
+  exoplanets?: { file: string; bin: string; stride: number; count: number; hosts: number };
   tle: { fetched: string } & Record<string, string[]>;
 }

@@ -36,6 +36,7 @@ npx tsx scripts/dev/rotation-check.ts        # Earth sub-solar longitude at Gree
 npx tsx scripts/dev/events-check.ts          # timing + sample of computed events
 npx tsx scripts/dev/eclipse-check.ts <epochMs>  # is moon X inside its parent's shadow?
 npx tsx scripts/dev/stars-check.ts           # star distances, magnitudes, proper motion, Barnard's closest approach
+npx tsx scripts/dev/exoplanets-check.ts      # exoplanet transit geometry, Kepler consistency, host keys
 ```
 
 ## Data refresh
@@ -44,7 +45,7 @@ npx tsx scripts/dev/stars-check.ts           # star distances, magnitudes, prope
 npm run data:build                           # everything (≈5 min; Horizons is polite-rate-limited in the script)
 npm run data:build -- --only=tle             # fresh ISS/Hubble TLEs (do this most often)
 npm run data:build -- --only=moons           # refit moons (20-year arcs around EPOCH_JD)
-npm run data:build -- --only=stars           # HYG v4.1 (34 MB) + AT-HYG m10 (28 MB) downloads, cached in node_modules/.cache
+npm run data:build -- --only=stars           # HYG v4.1 (34 MB) + AT-HYG m10 (28 MB) + Exoplanet Archive (3 MB) downloads, cached in node_modules/.cache; rebuilds stars + exoplanets together
 npm run data:textures                        # planet textures; skips files already present
 ```
 
@@ -70,6 +71,15 @@ SBDB: `https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=<designation>&phys-par=1`.
 2. Add a `StarSpec` to `src/data/stars.ts` with the same id (radius in R☉, mass in M☉, temperature, spectral type,
    bolometric luminosity, description, aliases for search).
 3. `npx tsx scripts/dev/stars-check.ts`, then `node scripts/dev/snap.mjs out.png --wait=20000 --eval="app.select('<id>'); app.flyTo('<id>'); 1" --after=8000`.
+
+## Curating an exoplanet system
+
+Planets and hosts come from the archive automatically; to add hand-written text, add an entry to `PLANET_NOTES`
+(keyed by the archive planet name, e.g. `'TRAPPIST-1 e'`) or `HOST_NOTES` (archive host name) in
+`src/data/exoplanets.ts`. Body ids are slugs of the archive names (`trappist-1-e`), so
+`node scripts/dev/snap.mjs out.png --wait=20000 --eval="app.select('trappist-1-e'); app.flyTo('trappist1'); 1" --after=8000`
+shows the system. Hosts with a HIP number attach to the curated star automatically; hosts without one need a line in
+`HOST_ALIASES` in `scripts/build-data.ts` if a curated star exists for them.
 
 ## Adding a moon texture
 

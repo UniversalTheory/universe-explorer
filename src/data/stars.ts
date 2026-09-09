@@ -16,7 +16,7 @@ interface StarSpec {
 }
 
 /** Approximate sRGB colour for a stellar surface temperature (K), for labels and swatches. */
-function tempColor(t: number): string {
+export function tempColor(t: number): string {
   if (t < 3000) return '#ff9a5c';
   if (t < 3700) return '#ffb27a';
   if (t < 5200) return '#ffd39a';

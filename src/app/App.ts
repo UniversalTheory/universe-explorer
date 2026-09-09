@@ -3,7 +3,9 @@ import { Body, Illumination, MoonPhase } from 'astronomy-engine';
 import { Clock } from '@/core/Clock';
 import { Settings } from '@/core/Settings';
 import { vdot, vlen, vnorm, vscale, vsub, type Vec3 } from '@/core/math3';
-import { BODIES, body, type BodyDef } from '@/data/catalog';
+import { BODIES, body, registerBodies, type BodyDef } from '@/data/catalog';
+import { buildExoplanetBodies, classify, PLANET_CLASS_LABEL } from '@/data/exoplanets';
+import { EXO_INCL_ASSUMED, EXO_MASS_IS_MSINI, EXO_PHASE_UNKNOWN, EXO_TRANSITS, nextTransitJd } from '@/ephemeris/exoplanets';
 import { Ephemeris } from '@/ephemeris/Ephemeris';
 import { AU_KM, C_KM_S, GAL_CENTRE_ECL, GAL_NORTH_ECL, LY_KM, eclToThree } from '@/ephemeris/frames';
 import { EventService } from '@/events/EventService';
@@ -12,7 +14,7 @@ import { CameraController, type FocusTarget } from '@/render/CameraController';
 import { Labels } from '@/render/Labels';
 import { Starfield } from '@/render/Starfield';
 import { configureTextures } from '@/render/Textures';
-import { Universe } from '@/render/Universe';
+import { EXO_LAYER, Universe } from '@/render/Universe';
 import { EventsPanel } from '@/ui/EventsPanel';
 import { InfoPanel } from '@/ui/InfoPanel';
 import { SettingsPanel } from '@/ui/SettingsPanel';
@@ -60,6 +62,7 @@ export class App {
     configureTextures(renderer);
     const starfield = new Starfield();
     const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load()]);
+    if (eph.exo) registerBodies(buildExoplanetBodies(eph.exo));
     return new App(renderer, eph, starfield, quality, pr);
   }
 
@@ -73,6 +76,7 @@ export class App {
     this.labels.onSelect = (id) => { if (!id.startsWith('star:')) this.select(id); };
 
     this.cam = new CameraController(renderer.domElement, this.target('sun'));
+    this.cam.camera.layers.enable(EXO_LAYER);
     this.cam.theta = 0.9; this.cam.phi = 0.42; this.cam.distance = 5.6 * AU_KM;
     this.cam.onClick = (x, y) => this.handleClick(x, y);
     this.cam.onUserInput = () => this.hint.classList.add('fade');
@@ -143,6 +147,7 @@ export class App {
 
   select(id: string) {
     const def = body(id);
+    this.universe.ensure(id);
     this.selectedId = id;
     this.info.show(def, this.universe.isAvailable(id));
     this.settingsPanel.hide();
@@ -154,6 +159,7 @@ export class App {
 
   flyTo(id: string, distanceOverride?: number) {
     const def = body(id);
+    this.universe.ensure(id);
     let distance: number;
     if (def.type === 'spacecraft') distance = def.parent ? 2.5e4 : 1.5e6;
     else distance = this.cam.framingDistance(def.radius);
@@ -185,11 +191,14 @@ export class App {
 
   /** Direction (world axes) from a body toward a pleasing three-quarter-lit viewpoint. */
   private litViewDir(id: string): THREE.Vector3 | undefined {
-    if (id === 'sun' || body(id).type === 'star') return undefined;
+    const def = body(id);
+    if (id === 'sun' || def.type === 'star') return undefined;
     const h = this.universe.helioOf(id) ?? this.eph.state(id, this.clock.time)?.pos;
     if (!h) return undefined;
-    // Toward the Sun, in Three axes (x, z, -y), rotated ~50° around the pole and raised ~20°.
-    const toSun = new THREE.Vector3(-h[0], -h[2], h[1]).normalize();
+    // Toward the light source (the Sun, or an exoplanet's host star), in Three axes (x, z, -y), rotated ~50° around the pole and raised ~20°.
+    let src: Vec3 = [0, 0, 0];
+    if (def.type === 'exoplanet' && def.parent) src = this.universe.helioOf(def.parent) ?? this.eph.state(def.parent, this.clock.time)?.pos ?? src;
+    const toSun = new THREE.Vector3(src[0] - h[0], src[2] - h[2], -(src[1] - h[1])).normalize();
     const angle = 0.85;
     const dir = new THREE.Vector3(toSun.x * Math.cos(angle) + toSun.z * Math.sin(angle), 0, -toSun.x * Math.sin(angle) + toSun.z * Math.cos(angle));
     dir.y = 0.36;
@@ -289,6 +298,33 @@ export class App {
     const rows: [string, string, boolean?][] = [];
     const st = this.eph.state(id, t);
     const earth = this.eph.state('earth', t);
+    if (def.type === 'exoplanet' && def.source.kind === 'exoplanet') {
+      const p = this.eph.exoplanet(def.source.key);
+      const host = def.parent ? body(def.parent) : null;
+      if (p && host) {
+        const cls = classify(p);
+        rows.push(['Type', PLANET_CLASS_LABEL[cls].replace(/^./, (c) => c.toUpperCase())]);
+        rows.push(['Host star', `${host.name}${host.spectral ? ` (${host.spectral})` : ''}`]);
+        const hostSt = this.eph.state(host.id, t);
+        if (hostSt) rows.push(['Distance from Sun', fmtKm(vlen(hostSt.pos)), true]);
+        rows.push(['Orbital period', fmtDays(p.per)]);
+        rows.push(['Semi-major axis', `${(p.a / AU_KM).toPrecision(3)} AU`]);
+        rows.push(['Eccentricity', p.e.toFixed(3)]);
+        rows.push(['Inclination', `${p.incl.toFixed(1)}°${p.flags & EXO_INCL_ASSUMED ? ' (assumed)' : ''}`]);
+        rows.push(['Radius', p.rade < 4 ? `${p.rade.toPrecision(3)} × Earth` : `${(p.rade / 11.209).toPrecision(3)} × Jupiter · ${p.rade.toFixed(1)} × Earth`]);
+        if (!isNaN(p.masse)) rows.push([p.flags & EXO_MASS_IS_MSINI ? 'Minimum mass (M sin i)' : 'Mass', p.masse < 30 ? `${p.masse.toPrecision(3)} × Earth` : `${(p.masse / 317.8).toPrecision(3)} × Jupiter`]);
+        if (p.flags & EXO_TRANSITS) {
+          const nt = nextTransitJd(p, t.jd);
+          if (nt !== null) rows.push(['Next transit (seen from Earth)', fmtDate((nt - 2440587.5) * 86400000) + (isNaN(p.trandur) ? '' : ` · lasts ${p.trandur.toFixed(1)} h`), true]);
+          else rows.push(['Transits its star', 'yes']);
+        }
+        if (p.flags & EXO_PHASE_UNKNOWN) rows.push(['Orbital phase', 'not measured (periastron set to J2000)', true]);
+        if (def.discovered) rows.push(['Discovered', def.discovered, true]);
+        for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+        this.info.setStats(rows);
+        return;
+      }
+    }
     const isStar = def.type === 'star' && id !== 'sun';
     if (st && isStar) {
       const d = vlen(st.pos);

@@ -16,6 +16,7 @@ import { Satellite } from './tle';
 import { elementsFromState } from './orbit-elements';
 import type { EphemerisData } from './types';
 import { StarCatalog } from './stars';
+import { ExoCatalog, exoplanetOrbitPath, exoplanetState, type ExoJson } from './exoplanets';
 
 const ZERO: OrbitState = { pos: [0, 0, 0], vel: [0, 0, 0] };
 
@@ -39,6 +40,7 @@ export class Ephemeris {
     readonly satellites: Map<string, Satellite>,
     /** Star catalogue; scripts that only need Solar System bodies may omit it. */
     readonly stars: StarCatalog = new StarCatalog(new ArrayBuffer(0)),
+    readonly exo: ExoCatalog | null = null,
   ) {}
 
   static async load(base = 'data/'): Promise<Ephemeris> {
@@ -53,7 +55,18 @@ export class Ephemeris {
     const satellites = new Map<string, Satellite>();
     for (const [id, tle] of Object.entries(data.tle ?? {})) if (Array.isArray(tle)) satellites.set(id, new Satellite(tle));
     const stars = new StarCatalog(await (await fetch(base + data.stars.file)).arrayBuffer(), data.stars.stride);
-    return new Ephemeris(data, trajectories, satellites, stars);
+    let exo: ExoCatalog | null = null;
+    if (data.exoplanets) {
+      const [json, bin] = await Promise.all([fetch(base + data.exoplanets.file).then((r) => r.json() as Promise<ExoJson>), fetch(base + data.exoplanets.bin).then((r) => r.arrayBuffer())]);
+      exo = new ExoCatalog(json, bin);
+    }
+    return new Ephemeris(data, trajectories, satellites, stars, exo);
+  }
+
+  /** Exoplanet record for a catalogue key (the archive planet name). */
+  exoplanet(key: string) {
+    const i = this.exo?.index(key);
+    return i === undefined ? null : this.exo!.planets[i];
   }
 
   /** Index into the star catalogue for a catalogue key, if present. */
@@ -68,6 +81,7 @@ export class Ephemeris {
       case 'spacecraft': return this.trajectories.has(s.key);
       case 'tle': return this.satellites.has(s.key);
       case 'star': return this.starIndex(s.key) !== undefined;
+      case 'exoplanet': return this.exoplanet(s.key) !== null && !!def.parent;
       default: return true;
     }
   }
@@ -104,6 +118,11 @@ export class Ephemeris {
       case 'star': {
         const i = this.starIndex(s.key);
         return i === undefined ? null : this.stars.state(i, t.tt / 365.25);
+      }
+      case 'exoplanet': {
+        const p = this.exoplanet(s.key);
+        const host = def.parent ? this.state(def.parent, t) : null;
+        return p && host ? exoplanetState(p, host.pos, t.jd) : null;
       }
       case 'planet': return planetState(s.aeBody, t.astro);
       case 'moon-ae': return moonGeoState(t.astro);
@@ -174,6 +193,11 @@ export class Ephemeris {
         const tr = this.trajectories.get(s.key);
         return tr ? { points: tr.path(1), relativeTo: 'sun', isTrajectory: true } : null;
       }
+      case 'exoplanet': {
+        const p = this.exoplanet(s.key);
+        const host = def.parent ? this.state(def.parent, t) : null;
+        return p && host ? { points: exoplanetOrbitPath(p, host.pos), relativeTo: def.parent! } : null;
+      }
       default: {
         // Osculating conic from the current state relative to the parent.
         const rel = this.relative(id, t);
@@ -191,6 +215,7 @@ export class Ephemeris {
   periodDays(id: string, t: SimTime): number | null {
     const def = body(id);
     if (def.source.kind === 'fixed' || def.source.kind === 'star') return null;
+    if (def.source.kind === 'exoplanet') return this.exoplanet(def.source.key)?.per ?? null;
     const rel = this.relative(id, t);
     if (!rel) return null;
     const gm = GM[def.parent ?? 'sun'] ?? GM.sun;

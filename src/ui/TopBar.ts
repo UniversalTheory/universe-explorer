@@ -32,7 +32,7 @@ export class TopBar {
     this.el.className = 'topbar';
     this.el.innerHTML = `
       <div class="glass brand"><span class="dot"></span><span class="title">Universe Explorer</span><span class="sub">live solar system</span></div>
-      <div class="search">${ICONS.search}<input type="search" placeholder="${innerWidth < 720 ? 'Search…' : 'Search planets, moons, stars, spacecraft…'}" autocomplete="off" spellcheck="false" /><div class="glass search-results"></div></div>
+      <div class="search">${ICONS.search}<input type="search" placeholder="${innerWidth < 720 ? 'Search…' : 'Search planets, moons, stars, exoplanets…'}" autocomplete="off" spellcheck="false" /><div class="glass search-results"></div></div>
       <div class="glass ladder" role="group" aria-label="Zoom level">${ZOOM_VIEWS.map((v, i) => `<button data-view="${v.id}" title="${v.title} (${i + 1})">${v.label}</button>`).join('')}</div>
       <div class="spacer"></div>
       <div class="glass actions"><button class="icon-btn" data-role="events" title="Upcoming events (E)">${ICONS.events}</button><button class="icon-btn" data-role="settings" title="Display settings (S)">${ICONS.settings}</button></div>`;
@@ -66,9 +66,23 @@ export class TopBar {
 
   private search(q: string) {
     const s = q.trim().toLowerCase();
-    this.matches = s
-      ? this.bodies.filter((b) => b.name.toLowerCase().includes(s) || b.id.includes(s) || b.type.includes(s) || b.aliases?.some((a) => a.toLowerCase().includes(s))).slice(0, 12)
-      : this.bodies.filter((b) => b.type === 'planet' || b.type === 'star').slice(0, 12);
+    if (!s) this.matches = this.bodies.filter((b) => (b.type === 'planet' || b.type === 'star') && !b.generated).slice(0, 12);
+    else {
+      // Rank: name starts with the query > alias/id match > substring; curated entries before generated ones.
+      const scored: [number, BodyDef][] = [];
+      for (const b of this.bodies) {
+        const name = b.name.toLowerCase();
+        let score = 0;
+        if (name.startsWith(s)) score = 3;
+        else if (b.aliases?.some((a) => a.toLowerCase().startsWith(s)) || b.id.startsWith(s)) score = 2.5;
+        else if (name.includes(s) || b.id.includes(s) || b.type.includes(s) || b.aliases?.some((a) => a.toLowerCase().includes(s))) score = 1;
+        if (!score) continue;
+        if (b.generated) score -= 0.5;
+        scored.push([score, b]);
+      }
+      scored.sort((a, b) => b[0] - a[0] || a[1].name.length - b[1].name.length);
+      this.matches = scored.slice(0, 12).map((x) => x[1]);
+    }
     this.active = 0;
     this.render();
   }

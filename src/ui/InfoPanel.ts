@@ -21,12 +21,12 @@ export class InfoPanel {
     this.current = def;
     const kids = childrenOf(def.id);
     this.el.innerHTML = `
-      <div class="head"><div><h2>${def.name}</h2><div class="kind">${def.type === 'dwarf' ? 'Dwarf planet' : def.spectral ? `${def.spectral} star` : def.type.charAt(0).toUpperCase() + def.type.slice(1)}${def.parent ? ` of ${body(def.parent).name}` : ''}</div></div><button class="icon-btn close" title="Close (Esc)">${CLOSE}</button></div>
+      <div class="head"><div><h2>${def.name}</h2><div class="kind">${def.type === 'dwarf' ? 'Dwarf planet' : def.spectral ? `${def.spectral} star` : def.type.charAt(0).toUpperCase() + def.type.slice(1)}${def.parent ? ` of ${body(def.parent).name}` : ''}${def.type === 'star' && def.moons ? ` · ${def.moons} planet${def.moons === 1 ? '' : 's'}` : ''}</div></div><button class="icon-btn close" title="Close (Esc)">${CLOSE}</button></div>
       <div class="body">
         <p class="desc">${def.description}</p>
         ${available ? '' : '<p class="desc" style="color:#ffb37a">No trajectory data for the current date.</p>'}
         <div class="stats"></div>
-        ${kids.length ? `<div class="section-title">${def.type === 'planet' || def.type === 'dwarf' ? 'Moons & satellites' : 'Companions'}</div><div class="moons-list">${kids.map((k) => `<span class="chip" data-id="${k.id}">${k.name}</span>`).join('')}</div>` : ''}
+        ${kids.length ? `<div class="section-title">${def.type === 'planet' || def.type === 'dwarf' ? 'Moons & satellites' : def.type === 'star' ? 'Planets' : 'Companions'}</div><div class="moons-list">${kids.map((k) => `<span class="chip" data-id="${k.id}">${k.name}</span>`).join('')}</div>` : ''}
         <div class="row"><button class="pill-btn primary" data-role="fly">Fly to ${def.name}</button>${def.parent ? `<button class="pill-btn" data-role="parent">Go to ${body(def.parent).name}</button>` : ''}</div>
       </div>`;
     this.statsEl = this.el.querySelector('.stats')!;

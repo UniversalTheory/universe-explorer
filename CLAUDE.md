@@ -32,6 +32,7 @@ npm run data:textures  # download planet textures + Milky Way
 python3 scripts/process-moon-maps.py <dir> [names]   # moon map sheets -> public/textures/moons
 node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=js]   # headless screenshot (any installed Chromium browser)
 npx tsx scripts/dev/stars-check.ts   # star catalogue sanity checks (distances, proper motion)
+npx tsx scripts/dev/exoplanets-check.ts   # exoplanet transit geometry and Kepler checks
 ```
 
 ## Non-negotiable conventions
@@ -49,7 +50,7 @@ npx tsx scripts/dev/stars-check.ts   # star catalogue sanity checks (distances, 
    are `helio - origin`. Keep double precision (plain number tuples) until the final subtraction.
 5. **Ephemeris code must stay DOM-free** (it runs in Node for tests and in the events Web Worker).
 6. `public/data` and `public/textures` are generated. Do not hand-edit; change the scripts.
-7. Keep `npm test` and `npx tsx scripts/dev/stars-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
+7. Keep `npm test`, `scripts/dev/stars-check.ts` and `scripts/dev/exoplanets-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
 8. Free/open assets only (public domain, CC BY, CC BY-SA, MIT). Credit new sources in README + settings panel.
 9. Product scope decisions are the user's: static-only for now, scale toggle, time scrubber (see
    `docs/DECISIONS.md`). Do not add a backend or paid service unprompted.
@@ -71,5 +72,7 @@ npx tsx scripts/dev/stars-check.ts   # star catalogue sanity checks (distances, 
 - A camera-facing world-sized quad rasterises as a bow-tie beyond ~1e14 km (SwiftShader at least). Use a
   pixel-sized point sprite for anything that must stay visible at stellar distances (see `GLOW_POINT_VERT`).
 - Gaia archive data is CC BY-NC; take star data only from HYG / AT-HYG (CC BY-SA 4.0).
+- Exoplanet systems are `lazy` bodies: call `universe.ensure(id)` before focusing or selecting one. Exoplanet meshes
+  live on `EXO_LAYER` so the Sun's light never reaches them; their host's light does.
 - Horizons: `REF_PLANE='B'` (body equator), CSV output, `TLIST` for single instants; spacecraft span errors
   say "prior to A.D. …" / "after A.D. …" and the pipeline clamps on them automatically.

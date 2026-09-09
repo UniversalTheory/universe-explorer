@@ -39,6 +39,7 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/core/Settings.ts` | persisted settings (localStorage) with change events |
 | `src/data/catalog.ts` | `BodyDef` for every body: physical data, description, textures, ephemeris source; meteor showers; notable one-off events |
 | `src/data/stars.ts` | ~115 curated stars (nearest, brightest, famous exoplanet hosts) with physical data and descriptions, keyed into the star catalogue |
+| `src/data/exoplanets.ts` | Turns the archive into `BodyDef`s (hosts + planets, lazy), planet classes and procedural skins, curated notes for ~90 systems/planets |
 | `src/ephemeris/frames.ts` | EQJ↔ECL, GAL→EQJ, ECL→Three, AU/GM constants |
 | `src/ephemeris/kepler.ts` | Kepler solvers (elliptic/parabolic/hyperbolic), conic state, orbit sampling |
 | `src/ephemeris/iau.ts` | IAU WGCCRE pole/prime-meridian models for ~40 bodies; `bodyPole`, `bodyFixedToEqj`, `poleFrameToEqj` |
@@ -48,6 +49,7 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/ephemeris/spacecraft.ts` | `Trajectory`: binary state-vector file + cubic Hermite interpolation |
 | `src/ephemeris/tle.ts` | SGP4 via satellite.js, TEME→EQJ→ECL |
 | `src/ephemeris/stars.ts` | `StarCatalog`: star positions + space velocities from `stars.bin`, linear motion in time; B−V colour helper |
+| `src/ephemeris/exoplanets.ts` | `ExoCatalog` + Keplerian state of a planet about its host in the sky frame (east, north, toward observer) |
 | `src/ephemeris/orbit-elements.ts` | osculating elements from a state vector (for drawing planet/moon orbits) |
 | `src/ephemeris/Ephemeris.ts` | facade + per-frame cache; loads `public/data` |
 | `src/ephemeris/types.ts` | shape of `public/data/ephemeris.json` |
@@ -208,4 +210,31 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
 - **Panorama fade**: the ESO sky sphere's opacity falls from 0.85 to 0.13 between 1e13 and 1e15 km from the Sun (`App.frame`), so the 3D cloud is what you see from the neighbourhood.
 - **Deep tier**: loaded once when the camera is > 5e13 km from the Sun or a star is focused, if `settings.deepStars`
   (default on for high quality, off on low; `Settings.applyDefault`). `StarCatalog.append` + `StarCloud.rebuild`.
+
+## Exoplanets (Phase 2, Stage C)
+
+- **Data**: `scripts/build-data.ts` → `loadExoplanetRows` fetches every row of the NASA Exoplanet Archive `pscomppars`
+  table (composite parameters; public domain) through its TAP endpoint (cached in `node_modules/.cache/pscomppars.csv`).
+  Hosts become rows of `stars.bin`: matched to HYG by HIP, HD, name or Gliese designation (so 51 Peg's planets hang off
+  the curated star), otherwise added inline from the archive's RA/Dec/distance/proper motion with a B−V estimated from
+  Teff. `exoplanets.json` holds names/hosts/methods; `exoplanets.bin` holds 14 float32 per planet (period, a, e, i, ω,
+  periastron and transit epochs as JD − 2450000, transit duration, radius, mass, T_eq, flags). Missing period or
+  semi-major axis is derived from the other via Kepler's law with the stellar mass (flag `EXO_A_DERIVED`); missing
+  radius from mass (Chen & Kipping-like); missing inclination is 90° for transiting planets, 60° otherwise (flag).
+- **Orbit** (`exoplanetState`): conic elements in a sky frame at the host (x = east, y = north, z = toward the Sun),
+  Ω = 0 because the node is unmeasured for nearly all systems, ω from the archive. The phase is real when the archive has
+  a periastron epoch or a transit midpoint (transit ⇔ ν = 90° − ω); otherwise periastron is placed at J2000 and flagged.
+  The mean motion uses the archive period exactly (gm is back-derived from a and P). Position is relative to the host,
+  and `Ephemeris.state` adds the host's heliocentric state, so proper motion carries the whole system.
+- **Bodies**: `buildExoplanetBodies` registers ~4,700 host `BodyDef`s (unless the host is a curated star) and 6,300
+  planet defs at boot (`registerBodies`), all `lazy`: the renderer creates a system's `SunObject` + `BodyObject`s only
+  when something in it is selected or focused (`Universe.ensure`). Planet skins: `classify` by radius/temperature into
+  lava / rocky / temperate / icy / super-Earth / mini-Neptune / Neptune / hot Jupiter / gas giant, each a procedural skin
+  with a per-planet hue variation.
+- **Lighting**: exoplanet meshes and a second `PointLight` live on layer `EXO_LAYER`; the light sits at the active host
+  (focused or selected system) with the host's colour, so planets are lit by their own star while the Sun's light on
+  layer 0 never reaches them. The eclipse shader gets the host as its light source and radius (mutual transits work).
+- **Info panel**: class, host, period, a, e, i (flagged when assumed), radius, mass or M sin i, next transit date and
+  duration from the archive midpoint, phase/node caveats, discovery method and facility.
+- **Search** ranks name-prefix matches first and curated entries above auto-generated ones.
 

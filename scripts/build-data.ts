@@ -5,9 +5,10 @@
  *   - JPL Horizons (moon osculating elements -> fitted mean elements, spacecraft state vectors)
  *   - JPL Small-Body Database (comet / asteroid / dwarf-planet elements + physical data)
  *   - HYG v4.1 + AT-HYG v4.0 star databases (CC BY-SA 4.0) -> star binaries (standard + deep tier)
+ *   - NASA Exoplanet Archive pscomppars (public domain) -> exoplanets.json + exoplanets.bin; hosts become star rows
  *   - Celestrak TLEs for ISS and Hubble
  *
- * Usage: npm run data:build [-- --only=moons,spacecraft,smallbodies,stars,tle]
+ * Usage: npm run data:build [-- --only=moons,spacecraft,smallbodies,stars,exoplanets,tle]  (stars and exoplanets build together)
  */
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -488,7 +489,72 @@ function parseCsv(csv: string): { head: string[]; rows: string[][] } {
   return { head, rows };
 }
 
-async function buildStars() {
+// --- Exoplanets (NASA Exoplanet Archive, pscomppars; public domain) ------------------------
+const EXO_URL = 'https://exoplanetarchive.ipac.caltech.edu/TAP/sync?format=csv&query=' + encodeURIComponent(
+  'select pl_name,hostname,hip_name,hd_name,sy_pnum,sy_snum,discoverymethod,disc_year,disc_facility,pl_orbper,pl_orbsmax,pl_orbeccen,pl_orbincl,pl_orblper,pl_orbtper,pl_tranmid,pl_trandur,pl_rade,pl_radj,pl_bmasse,pl_bmassprov,pl_eqt,tran_flag,rv_flag,ima_flag,st_teff,st_rad,st_mass,st_lum,st_spectype,sy_dist,ra,dec,sy_vmag,sy_gaiamag,sy_pmra,sy_pmdec,st_radv from pscomppars');
+const EXO_STRIDE = 14, EXO_JD0 = 2450000;
+const EXO_TRANSITS = 1, EXO_MASS_IS_MSINI = 2, EXO_PHASE_UNKNOWN = 4, EXO_INCL_ASSUMED = 8, EXO_A_DERIVED = 16;
+const GM_SUN = 1.32712440041279419e11, AU_KM = 149597870.7;
+
+interface ExoRow { name: string; host: string; hip: number; hd: string; n: number; method: string; year: number; facility: string; per: number; a: number; e: number; incl: number; argp: number; tper: number; tranmid: number; trandur: number; rade: number; masse: number; msini: boolean; eqt: number; tran: boolean; teff: number; rad: number; mass: number; lum: number; spect: string; dist: number; ra: number; dec: number; vmag: number; gmag: number; pmra: number; pmdec: number; rv: number }
+
+/** Parse a CSV line with quoted fields. */
+function csvLine(line: string): string[] {
+  const out: string[] = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { q = !q; continue; }
+    if (c === ',' && !q) { out.push(cur); cur = ''; continue; }
+    cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+async function loadExoplanetRows(): Promise<ExoRow[]> {
+  const cache = 'node_modules/.cache/pscomppars.csv';
+  if (!existsSync(cache)) { console.log('downloading NASA Exoplanet Archive pscomppars…'); writeFileSync(cache, await fetchText(EXO_URL)); }
+  const lines = readFileSync(cache, 'utf8').split('\n').filter(Boolean);
+  const head = csvLine(lines[0]);
+  const c = (n: string) => head.indexOf(n);
+  const num = (f: string[], n: string) => { const v = f[c(n)]; return v === '' || v === undefined ? NaN : +v; };
+  const rows: ExoRow[] = [];
+  for (let k = 1; k < lines.length; k++) {
+    const f = csvLine(lines[k]);
+    if (f.length < head.length) continue;
+    rows.push({
+      name: f[c('pl_name')], host: f[c('hostname')], hip: +(f[c('hip_name')].replace(/\D/g, '')) || 0, hd: f[c('hd_name')].trim(), n: num(f, 'sy_pnum'),
+      method: f[c('discoverymethod')], year: num(f, 'disc_year'), facility: f[c('disc_facility')],
+      per: num(f, 'pl_orbper'), a: num(f, 'pl_orbsmax'), e: num(f, 'pl_orbeccen'), incl: num(f, 'pl_orbincl'), argp: num(f, 'pl_orblper'),
+      tper: num(f, 'pl_orbtper'), tranmid: num(f, 'pl_tranmid'), trandur: num(f, 'pl_trandur'), rade: num(f, 'pl_rade'), masse: num(f, 'pl_bmasse'),
+      msini: /sini/i.test(f[c('pl_bmassprov')]), eqt: num(f, 'pl_eqt'), tran: f[c('tran_flag')] === '1',
+      teff: num(f, 'st_teff'), rad: num(f, 'st_rad'), mass: num(f, 'st_mass'), lum: num(f, 'st_lum'), spect: f[c('st_spectype')].trim(), dist: num(f, 'sy_dist'),
+      ra: num(f, 'ra'), dec: num(f, 'dec'), vmag: num(f, 'sy_vmag'), gmag: num(f, 'sy_gaiamag'), pmra: num(f, 'sy_pmra'), pmdec: num(f, 'sy_pmdec'), rv: num(f, 'st_radv'),
+    });
+  }
+  console.log(`exoplanets: ${rows.length} rows`);
+  return rows;
+}
+
+/** B−V from effective temperature (inverse of Ballesteros 2012), for star colours. */
+function bvFromTeff(teff: number): number {
+  if (!(teff > 0)) return 0.65;
+  const T = (bv: number) => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
+  let lo = -0.4, hi = 2.0;
+  for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (T(mid) > teff) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** Radius (Earth radii) from mass (Earth masses) when the archive has no radius (Chen & Kipping-like). */
+function radiusFromMass(m: number): number {
+  if (!(m > 0)) return 1;
+  if (m <= 2.04) return 1.008 * Math.pow(m, 0.279);
+  if (m <= 132) return 0.808 * Math.pow(m, 0.589);
+  return 11.2 * Math.pow(m / 318, -0.04);
+}
+
+async function buildStars(exo: ExoRow[]) {
   const cache = 'node_modules/.cache/hygdata_v41.csv';
   if (!existsSync(cache)) {
     console.log('downloading HYG v4.1…');
@@ -536,6 +602,36 @@ async function buildStars() {
     if (r.key) throw new Error(`star key ${key} duplicates ${r.key}`);
     r.key = key;
   }
+  // Exoplanet hosts: reuse a curated key, attach to the HYG row (HIP / HD), or add an inline row.
+  const byHd = new Map<string, StarRow>();
+  for (const f of rows) if (f[col('hd')]) byHd.set('HD ' + f[col('hd')].trim(), byHip.get(+f[cHip]) ?? byGl.get(f[cGl].trim()) ?? (null as unknown as StarRow));
+  // Hosts without HIP/HD numbers are matched by name: curated inline stars, HYG proper names, Gliese designations.
+  const HOST_ALIASES: Record<string, string> = { 'TRAPPIST-1': 'trappist1', "Teegarden's Star": 'teegarden', 'Luhman 16': 'luhman16' };
+  const byProper = new Map<string, StarRow>();
+  for (const r of out) if (r.name) byProper.set(r.name.toLowerCase(), r);
+  for (const r of out) if (r.key && STAR_KEYS[r.key] && 'inline' in STAR_KEYS[r.key]) byProper.set((STAR_KEYS[r.key] as { inline: { name: string } }).inline.name.toLowerCase(), r);
+  const hostRows = new Map<string, { row: StarRow; key: string; first: ExoRow }>();
+  let skippedHosts = 0;
+  for (const r of exo) {
+    if (hostRows.has(r.host)) continue;
+    if (!(r.dist > 0)) { skippedHosts++; continue; }
+    let row: StarRow | undefined = r.hip ? byHip.get(r.hip) : undefined;
+    if (!row && r.hd) row = byHd.get(r.hd) ?? undefined;
+    if (!row && HOST_ALIASES[r.host]) row = out.find((x) => x.key === HOST_ALIASES[r.host]);
+    if (!row) row = byGl.get(r.host) ?? byGl.get(r.host.replace(/^GJ /, 'Gl ')) ?? byProper.get(r.host.toLowerCase());
+    let key: string;
+    if (row?.key) key = row.key;
+    else {
+      key = 'x-' + slug(r.host);
+      if (!row) {
+        const mag = isFinite(r.vmag) ? r.vmag : isFinite(r.gmag) ? r.gmag : 15;
+        row = { ra: r.ra, dec: r.dec, dist: r.dist, pmra: r.pmra || 0, pmdec: r.pmdec || 0, rv: isFinite(r.rv) ? r.rv : 0, mag, ci: bvFromTeff(r.teff), hip: 0, flags: 0, name: '' };
+        out.push(row);
+      }
+      row.key = key;
+    }
+    hostRows.set(r.host, { row, key, first: r });
+  }
   out.sort((a, b) => a.mag - b.mag);
   const buf = new Float32Array(out.length * STAR_STRIDE);
   out.forEach((r, i) => starFloats(r, buf, i * STAR_STRIDE));
@@ -570,7 +666,41 @@ async function buildStars() {
   deep.forEach((r, i) => starFloats(r, dbuf, i * STAR_STRIDE));
   writeFileSync(`${OUT}/stars-deep.bin`, Buffer.from(dbuf.buffer));
   console.log(`deep stars: ${deep.length}`);
-  return { file: 'stars.bin', count: out.length, stride: STAR_STRIDE, names, keys, deep: { file: 'stars-deep.bin', count: deep.length } };
+  // Exoplanet files.
+  const hostList: (string | number)[][] = [], hostIdx = new Map<string, number>();
+  for (const [name, h] of hostRows) {
+    hostIdx.set(name, hostList.length);
+    const f = h.first;
+    hostList.push([name, h.key, f.teff, f.rad, f.mass, isFinite(f.lum) ? Math.pow(10, f.lum) : NaN, f.spect, f.n, f.dist].map((v) => (typeof v === 'number' && isNaN(v) ? null : v)) as (string | number)[]);
+  }
+  const planets: (string | number)[][] = [], pbuf: number[] = [];
+  let skippedPlanets = 0;
+  for (const r of exo) {
+    const hi = hostIdx.get(r.host);
+    if (hi === undefined) { skippedPlanets++; continue; }
+    let per = r.per, a = r.a, flags = 0;
+    const mSun = isFinite(r.mass) ? r.mass : 1;
+    if (!(per > 0) && a > 0) { per = (2 * Math.PI * Math.sqrt(Math.pow(a * AU_KM, 3) / (GM_SUN * mSun))) / 86400; flags |= EXO_A_DERIVED; }
+    else if (!(a > 0) && per > 0) { a = Math.cbrt(GM_SUN * mSun * Math.pow((per * 86400) / (2 * Math.PI), 2)) / AU_KM; flags |= EXO_A_DERIVED; }
+    if (!(per > 0) || !(a > 0)) { skippedPlanets++; continue; }
+    const e = isFinite(r.e) && r.e >= 0 && r.e < 1 ? r.e : 0;
+    let incl = r.incl;
+    if (!isFinite(incl)) { incl = r.tran ? 90 : 60; flags |= EXO_INCL_ASSUMED; }
+    const argp = isFinite(r.argp) ? r.argp : 90;
+    if (r.tran) flags |= EXO_TRANSITS;
+    if (r.msini) flags |= EXO_MASS_IS_MSINI;
+    if (!isFinite(r.tper) && !isFinite(r.tranmid)) flags |= EXO_PHASE_UNKNOWN;
+    const rade = isFinite(r.rade) ? r.rade : radiusFromMass(r.masse);
+    planets.push([r.name, hi, r.method, isFinite(r.year) ? r.year : 0, r.facility]);
+    pbuf.push(per, a, e, incl, argp, isFinite(r.tper) ? r.tper - EXO_JD0 : NaN, isFinite(r.tranmid) ? r.tranmid - EXO_JD0 : NaN, r.trandur, rade, r.masse, r.eqt, flags, 0, 0);
+  }
+  writeFileSync(`${OUT}/exoplanets.bin`, Buffer.from(new Float32Array(pbuf).buffer));
+  writeFileSync(`${OUT}/exoplanets.json`, JSON.stringify({ hosts: hostList, planets }));
+  console.log(`exoplanets: ${planets.length} planets around ${hostList.length} hosts (skipped ${skippedHosts} hosts without distance, ${skippedPlanets} planets)`);
+  return {
+    stars: { file: 'stars.bin', count: out.length, stride: STAR_STRIDE, names, keys, deep: { file: 'stars-deep.bin', count: deep.length } },
+    exoplanets: { file: 'exoplanets.json', bin: 'exoplanets.bin', stride: EXO_STRIDE, count: planets.length, hosts: hostList.length },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -593,7 +723,7 @@ async function main() {
   if (want('moons')) data.moons = await buildMoons();
   if (want('smallbodies')) data.smallBodies = await buildSmallBodies();
   if (want('spacecraft')) data.spacecraft = await buildSpacecraft();
-  if (want('stars')) data.stars = await buildStars();
+  if (want('stars') || want('exoplanets')) { const r = await buildStars(await loadExoplanetRows()); data.stars = r.stars; data.exoplanets = r.exoplanets; }
   if (want('tle')) data.tle = await buildTle();
   writeFileSync(file, JSON.stringify(data));
   console.log('wrote', file);
