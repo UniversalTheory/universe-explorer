@@ -6,6 +6,8 @@ import { vdot, vlen, vnorm, vscale, vsub, type Vec3 } from '@/core/math3';
 import { BODIES, body, registerBodies, type BodyDef } from '@/data/catalog';
 import { buildExoplanetBodies, classify, PLANET_CLASS_LABEL } from '@/data/exoplanets';
 import { buildDeepSkyBodies, DSO_KIND_LABEL } from '@/data/deepsky';
+import { buildCompactBodies } from '@/data/compact';
+import { apparentSeparation, schwarzschildKm } from '@/ephemeris/binary';
 import { EXO_INCL_ASSUMED, EXO_MASS_IS_MSINI, EXO_PHASE_UNKNOWN, EXO_TRANSITS, nextTransitJd } from '@/ephemeris/exoplanets';
 import { Ephemeris } from '@/ephemeris/Ephemeris';
 import { AU_KM, C_KM_S, GAL_CENTRE_ECL, GAL_NORTH_ECL, LY_KM, eclToThree } from '@/ephemeris/frames';
@@ -65,6 +67,7 @@ export class App {
     const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load()]);
     if (eph.exo) registerBodies(buildExoplanetBodies(eph.exo));
     if (eph.deepSky) registerBodies(buildDeepSkyBodies(eph.deepSky));
+    registerBodies(buildCompactBodies());
     return new App(renderer, eph, starfield, quality, pr);
   }
 
@@ -164,6 +167,7 @@ export class App {
     this.universe.ensure(id);
     let distance: number;
     if (def.type === 'spacecraft') distance = def.parent ? 2.5e4 : 1.5e6;
+    else if (def.compact === 'blackhole') distance = this.cam.framingDistance(def.radius * 16);   // frame the accretion disc / photon ring
     else distance = this.cam.framingDistance(def.radius);
     if (id === 'sun') distance = Math.max(distance, 4.5e6);
     if (distanceOverride) distance = distanceOverride;
@@ -194,7 +198,7 @@ export class App {
   /** Direction (world axes) from a body toward a pleasing three-quarter-lit viewpoint. */
   private litViewDir(id: string): THREE.Vector3 | undefined {
     const def = body(id);
-    if (id === 'sun' || def.type === 'star') return undefined;
+    if (id === 'sun' || def.type === 'star' || def.type === 'blackhole' || def.type === 'neutron') return undefined;
     const h = this.universe.helioOf(id) ?? this.eph.state(id, this.clock.time)?.pos;
     if (!h) return undefined;
     // Deep-sky cards are photographs taken from here: approach them from the Sun's side, slightly off-axis.
@@ -307,6 +311,50 @@ export class App {
     const rows: [string, string, boolean?][] = [];
     const st = this.eph.state(id, t);
     const earth = this.eph.state('earth', t);
+    if (def.compact) {
+      const mSun = (def.mass ?? 0) / 1.9885e30;
+      rows.push(['Type', def.compact === 'blackhole' ? (mSun > 1e5 ? 'Supermassive black hole' : 'Stellar-mass black hole') : def.compact === 'neutron' ? (def.spinSeconds ? (def.spinSeconds > 2 ? 'Magnetar / slow pulsar' : def.spinSeconds < 0.02 ? 'Millisecond pulsar' : 'Pulsar') : 'Neutron star') : 'White dwarf']);
+      if (st) rows.push(['Distance from Sun', fmtKm(vlen(st.pos)), true]);
+      if (mSun) rows.push(['Mass', mSun >= 1e4 ? `${fmtBig(mSun)} × Sun` : `${mSun.toPrecision(3)} × Sun`]);
+      if (def.compact === 'blackhole') rows.push(['Event horizon radius', fmtKm(schwarzschildKm(mSun))]);
+      else rows.push(['Radius', def.radius < 100 ? `${def.radius.toFixed(0)} km` : `${fmtBig(def.radius)} km · ${(def.radius / 6371).toFixed(2)} × Earth`]);
+      if (def.spinSeconds) rows.push(['Spin period', def.spinSeconds < 1 ? `${(def.spinSeconds * 1000).toFixed(2)} ms · ${(1 / def.spinSeconds).toFixed(1)} per second` : `${def.spinSeconds.toFixed(3)} s`]);
+      if (def.temperature) rows.push(['Temperature', def.temperature]);
+      if (def.source.kind === 'binary' && def.parent) {
+        const p = this.eph.state(def.parent, t);
+        rows.push(['Orbital period', fmtDays(def.source.el.per)]);
+        if (p) { const sep = apparentSeparation(def.source.el, vlen(p.pos), t.jd); rows.push(['Separation now', `${sep.rho.toFixed(2)}″ at PA ${sep.theta.toFixed(0)}° · ${fmtKm(vlen(this.eph.relative(id, t)?.pos ?? [0, 0, 0]))}`, true]); }
+        if (!def.source.phaseKnown) rows.push(['Orbit', 'period and inclination measured; node and phase not', true]);
+      }
+      const kids = this.eph.availableBodies().filter((b) => b.parent === id);
+      for (const k of kids) if (k.source.kind === 'binary') rows.push([`${k.name} orbit`, `${fmtDays(k.source.el.per)}${k.source.phaseKnown ? '' : ' (phase not measured)'}`, true]);
+      if (def.discovered) rows.push(['Discovered', def.discovered, true]);
+      for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+      this.info.setStats(rows);
+      return;
+    }
+    if (def.compact) {
+      const mSun = (def.mass ?? 0) / 1.9885e30;
+      rows.push(['Type', def.compact === 'blackhole' ? (mSun > 1e5 ? 'Supermassive black hole' : 'Stellar-mass black hole') : def.compact === 'neutron' ? (def.spinSeconds ? (def.spinSeconds > 2 ? 'Magnetar / slow pulsar' : def.spinSeconds < 0.02 ? 'Millisecond pulsar' : 'Pulsar') : 'Neutron star') : 'White dwarf']);
+      if (st) rows.push(['Distance from Sun', fmtKm(vlen(st.pos)), true]);
+      if (mSun) rows.push(['Mass', mSun >= 1e4 ? `${fmtBig(mSun)} × Sun` : `${mSun.toPrecision(3)} × Sun`]);
+      if (def.compact === 'blackhole') rows.push(['Event horizon radius', fmtKm(schwarzschildKm(mSun))]);
+      else rows.push(['Radius', def.radius < 100 ? `${def.radius.toFixed(0)} km` : `${fmtBig(def.radius)} km · ${(def.radius / 6371).toFixed(2)} × Earth`]);
+      if (def.spinSeconds) rows.push(['Spin period', def.spinSeconds < 1 ? `${(def.spinSeconds * 1000).toFixed(2)} ms · ${(1 / def.spinSeconds).toFixed(1)} per second` : `${def.spinSeconds.toFixed(3)} s`]);
+      if (def.temperature) rows.push(['Temperature', def.temperature]);
+      if (def.source.kind === 'binary' && def.parent) {
+        const p = this.eph.state(def.parent, t);
+        rows.push(['Orbital period', fmtDays(def.source.el.per)]);
+        if (p) { const sep = apparentSeparation(def.source.el, vlen(p.pos), t.jd); rows.push(['Separation now', `${sep.rho.toFixed(2)}″ at PA ${sep.theta.toFixed(0)}° · ${fmtKm(vlen(this.eph.relative(id, t)?.pos ?? [0, 0, 0]))}`, true]); }
+        if (!def.source.phaseKnown) rows.push(['Orbit', 'period and inclination measured; node and phase not', true]);
+      }
+      const kids = this.eph.availableBodies().filter((b) => b.parent === id);
+      for (const k of kids) if (k.source.kind === 'binary') rows.push([`${k.name} orbit`, `${fmtDays(k.source.el.per)}${k.source.phaseKnown ? '' : ' (phase not measured)'}`, true]);
+      if (def.discovered) rows.push(['Discovered', def.discovered, true]);
+      for (const [k, v] of def.facts ?? []) rows.push([k, v, true]);
+      this.info.setStats(rows);
+      return;
+    }
     if (def.type === 'nebula' || def.type === 'cluster') {
       const rec = this.eph.deepSky?.get(id);
       if (rec && st) {
@@ -359,6 +407,10 @@ export class App {
       const year = new Date(t.ms).getUTCFullYear() - ly;
       rows.push(['Light travel time', `${fmtLightTime(d / C_KM_S)} · left the star ${year >= 0 ? `around ${Math.round(year)}` : `${fmtBig(-year)} years BC`}`, true]);
       rows.push(['Space velocity', `${vlen(st.vel).toFixed(1)} km/s relative to the Sun`, true]);
+      if (def.source.kind === 'binary' && def.parent) {
+        const rel = this.eph.relative(id, t);
+        rows.push([`Orbit around ${body(def.parent).name}`, `${fmtDays(def.source.el.per)} · now ${fmtKm(vlen(rel?.pos ?? [0, 0, 0]))} apart · ${(vlen(rel?.vel ?? [0, 0, 0])).toFixed(1)} km/s${def.source.phaseKnown ? '' : ' (phase not measured)'}`, true]);
+      }
       const idx = def.source.kind === 'star' ? this.eph.starIndex(def.source.key) : undefined;
       if (idx !== undefined) {
         const cat = this.eph.stars;

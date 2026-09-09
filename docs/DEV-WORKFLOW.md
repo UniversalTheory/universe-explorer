@@ -38,6 +38,7 @@ npx tsx scripts/dev/eclipse-check.ts <epochMs>  # is moon X inside its parent's 
 npx tsx scripts/dev/stars-check.ts           # star distances, magnitudes, proper motion, Barnard's closest approach
 npx tsx scripts/dev/exoplanets-check.ts      # exoplanet transit geometry, Kepler consistency, host keys
 npx tsx scripts/dev/deepsky-check.ts         # deep-sky positions, Orion apparent size, image licences
+npx tsx scripts/dev/compact-check.ts         # binary orbits: Sirius B, S2 periastron, Alpha Cen B
 ```
 
 ## Data refresh
@@ -82,6 +83,12 @@ SBDB: `https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=<designation>&phys-par=1`.
 3. Add a description to `DSO_NOTES` in `src/data/deepsky.ts`; run `npx tsx scripts/dev/deepsky-check.ts`.
    To replace a wrong picture, delete the object's entry in `node_modules/.cache/deepsky-images.json` and the jpg, set an
    explicit `File:` name, and re-run step 2.
+
+## Adding a compact object or binary companion
+
+Add an entry to `BH`, `NS` or `WD` in `src/data/compact.ts` (position via a star key or `fixed(ra, dec, ly)`, mass in M☉,
+optional spin; a `companion` with period, masses and inclination, or full visual-binary elements via `binaryElements`).
+No pipeline step is needed unless the system should attach to a HYG star (then add a `STAR_KEYS` entry and rebuild stars).
 
 ## Curating an exoplanet system
 

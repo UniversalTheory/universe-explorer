@@ -1,7 +1,7 @@
 import type { Settings, SettingsState } from '@/core/Settings';
 
 const TOGGLES: [keyof SettingsState, string][] = [
-  ['orbits', 'Orbit lines'], ['labels', 'Labels'], ['moons', 'Moons'], ['smallBodies', 'Asteroids & comets'], ['spacecraft', 'Spacecraft'], ['belts', 'Asteroid & Kuiper belts'], ['stars', 'Stars & Milky Way'], ['exoplanets', 'Exoplanet systems'], ['deepSky', 'Nebulae & clusters'], ['deepStars', 'Deep star catalogue (+221k stars, 9 MB)'],
+  ['orbits', 'Orbit lines'], ['labels', 'Labels'], ['moons', 'Moons'], ['smallBodies', 'Asteroids & comets'], ['spacecraft', 'Spacecraft'], ['belts', 'Asteroid & Kuiper belts'], ['stars', 'Stars & Milky Way'], ['exoplanets', 'Exoplanet systems'], ['deepSky', 'Nebulae & clusters'], ['compact', 'Black holes & neutron stars'], ['deepStars', 'Deep star catalogue (+221k stars, 9 MB)'],
 ];
 
 export class SettingsPanel {

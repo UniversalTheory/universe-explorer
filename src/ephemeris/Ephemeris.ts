@@ -4,7 +4,7 @@
  */
 import { mmul, vadd, type Mat3, type Vec3 } from '@/core/math3';
 import type { SimTime } from '@/core/time';
-import { body, BODIES, type BodyDef } from '@/data/catalog';
+import { body, BODIES, BODY_MAP, type BodyDef } from '@/data/catalog';
 import { bodyFixedToEqj, bodyPole } from './iau';
 import { EQJ_TO_ECL } from './frames';
 import { conicState, sampleConic, type OrbitState } from './kepler';
@@ -18,6 +18,7 @@ import type { EphemerisData } from './types';
 import { StarCatalog } from './stars';
 import { ExoCatalog, exoplanetOrbitPath, exoplanetState, type ExoJson } from './exoplanets';
 import { DeepSkyCatalog, type DsoJson } from './deepsky';
+import { binaryOrbitPath, binaryState } from './binary';
 
 const ZERO: OrbitState = { pos: [0, 0, 0], vel: [0, 0, 0] };
 
@@ -86,6 +87,7 @@ export class Ephemeris {
       case 'tle': return this.satellites.has(s.key);
       case 'star': return this.starIndex(s.key) !== undefined;
       case 'exoplanet': return this.exoplanet(s.key) !== null && !!def.parent;
+      case 'binary': return !!def.parent && BODY_MAP.has(def.parent);
       default: return true;
     }
   }
@@ -127,6 +129,10 @@ export class Ephemeris {
         const p = this.exoplanet(s.key);
         const host = def.parent ? this.state(def.parent, t) : null;
         return p && host ? exoplanetState(p, host.pos, t.jd) : null;
+      }
+      case 'binary': {
+        const host = def.parent ? this.state(def.parent, t) : null;
+        return host ? binaryState(s.el, host.pos, t.jd) : null;
       }
       case 'planet': return planetState(s.aeBody, t.astro);
       case 'moon-ae': return moonGeoState(t.astro);
@@ -202,6 +208,10 @@ export class Ephemeris {
         const host = def.parent ? this.state(def.parent, t) : null;
         return p && host ? { points: exoplanetOrbitPath(p, host.pos), relativeTo: def.parent! } : null;
       }
+      case 'binary': {
+        const host = def.parent ? this.state(def.parent, t) : null;
+        return host ? { points: binaryOrbitPath(s.el, host.pos), relativeTo: def.parent! } : null;
+      }
       default: {
         // Osculating conic from the current state relative to the parent.
         const rel = this.relative(id, t);
@@ -220,6 +230,7 @@ export class Ephemeris {
     const def = body(id);
     if (def.source.kind === 'fixed' || def.source.kind === 'star') return null;
     if (def.source.kind === 'exoplanet') return this.exoplanet(def.source.key)?.per ?? null;
+    if (def.source.kind === 'binary') return def.source.el.per;
     const rel = this.relative(id, t);
     if (!rel) return null;
     const gm = GM[def.parent ?? 'sun'] ?? GM.sun;

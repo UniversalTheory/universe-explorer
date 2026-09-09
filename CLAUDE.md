@@ -51,7 +51,7 @@ npm run data:deepsky-images [id…]     # licence-checked Commons photos for neb
    are `helio - origin`. Keep double precision (plain number tuples) until the final subtraction.
 5. **Ephemeris code must stay DOM-free** (it runs in Node for tests and in the events Web Worker).
 6. `public/data` and `public/textures` are generated. Do not hand-edit; change the scripts.
-7. Keep `npm test`, `scripts/dev/stars-check.ts`, `scripts/dev/exoplanets-check.ts` and `scripts/dev/deepsky-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
+7. Keep `npm test`, `scripts/dev/stars-check.ts`, `scripts/dev/exoplanets-check.ts`, `scripts/dev/deepsky-check.ts` and `scripts/dev/compact-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
 8. Free/open assets only (public domain, CC BY, CC BY-SA, MIT). Credit new sources in README + settings panel.
 9. Product scope decisions are the user's: static-only for now, scale toggle, time scrubber (see
    `docs/DECISIONS.md`). Do not add a backend or paid service unprompted.

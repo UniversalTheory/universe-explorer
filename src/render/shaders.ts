@@ -397,3 +397,51 @@ void main() {
 }
 `;
 
+/** Black hole photon ring / accretion disc (RingGeometry in local units of the shadow radius). */
+export const BH_DISC_VERT = /* glsl */ `
+varying vec2 vUv;
+varying vec3 vLocal;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main() {
+  vUv = uv;
+  vLocal = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  #include <logdepthbuf_vertex>
+}
+`;
+export const BH_RING_FRAG = /* glsl */ `
+uniform float uInner;
+uniform float uOuter;
+uniform float uTime;
+varying vec3 vLocal;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  #include <logdepthbuf_fragment>
+  float r = length(vLocal.xy);
+  float t = (r - uInner) / (uOuter - uInner);
+  float a = exp(-t * 6.0) * 1.4 * smoothstep(0.0, 0.08, t);
+  vec3 col = mix(vec3(1.0, 0.95, 0.85), vec3(1.0, 0.6, 0.25), t);
+  gl_FragColor = vec4(col * a, 1.0);
+}
+`;
+export const BH_DISC_FRAG = /* glsl */ `
+uniform float uInner;
+uniform float uOuter;
+uniform float uTime;
+varying vec3 vLocal;
+#include <logdepthbuf_pars_fragment>
+void main() {
+  #include <logdepthbuf_fragment>
+  float r = length(vLocal.xy);
+  float t = clamp((r - uInner) / (uOuter - uInner), 0.0, 1.0);
+  float ang = atan(vLocal.y, vLocal.x);
+  // Brightness ∝ r⁻², turbulent streaks that orbit faster inside, Doppler boost on the approaching side.
+  float streaks = 0.75 + 0.25 * sin(ang * 9.0 - uTime * (2.2 / (0.3 + t)) + r * 2.0) * sin(ang * 4.0 + uTime * 0.7);
+  float beam = 1.0 + 0.7 * sin(ang + uTime * 0.05);
+  float b = pow(1.0 - t, 2.2) * streaks * beam * smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.85, 1.0, t));
+  vec3 col = mix(vec3(1.0, 0.92, 0.75), vec3(1.0, 0.45, 0.15), t);
+  gl_FragColor = vec4(col * b * 1.6, 1.0);
+}
+`;
+

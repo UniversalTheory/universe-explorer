@@ -1,5 +1,6 @@
 import { body, childrenOf, type BodyDef } from '@/data/catalog';
 
+const KIND_LABEL: Record<string, string> = { blackhole: 'Black hole', neutron: 'Neutron star', exoplanet: 'Exoplanet', nebula: 'Nebula', cluster: 'Star cluster', interstellar: 'Interstellar object', region: 'Region' };
 const CLOSE = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
 export class InfoPanel {
@@ -21,7 +22,7 @@ export class InfoPanel {
     this.current = def;
     const kids = childrenOf(def.id);
     this.el.innerHTML = `
-      <div class="head"><div><h2>${def.name}</h2><div class="kind">${def.type === 'dwarf' ? 'Dwarf planet' : def.spectral ? `${def.spectral} star` : def.type.charAt(0).toUpperCase() + def.type.slice(1)}${def.parent ? ` of ${body(def.parent).name}` : ''}${def.type === 'star' && def.moons ? ` · ${def.moons} planet${def.moons === 1 ? '' : 's'}` : ''}</div></div><button class="icon-btn close" title="Close (Esc)">${CLOSE}</button></div>
+      <div class="head"><div><h2>${def.name}</h2><div class="kind">${def.type === 'dwarf' ? 'Dwarf planet' : def.spectral ? `${def.spectral} star` : KIND_LABEL[def.type] ?? def.type.charAt(0).toUpperCase() + def.type.slice(1)}${def.parent ? ` of ${body(def.parent).name}` : ''}${def.type === 'star' && def.moons ? ` · ${def.moons} planet${def.moons === 1 ? '' : 's'}` : ''}</div></div><button class="icon-btn close" title="Close (Esc)">${CLOSE}</button></div>
       <div class="body">
         <p class="desc">${def.description}</p>
         ${available ? '' : '<p class="desc" style="color:#ffb37a">No trajectory data for the current date.</p>'}

@@ -448,6 +448,8 @@ const STAR_KEYS: Record<string, StarKey> = {
   thuban: { hip: 68756 }, kochab: { hip: 72607 }, alphard: { hip: 46390 }, 'mu-ara': { hip: 86796 }, 'upsilon-and': { hip: 7513 }, '47uma': { hip: 53721 },
   '55cnc': { hip: 43587 }, 'beta-pic': { hip: 27321 }, 'au-mic': { hip: 102409 }, hr8799: { hip: 114189 }, gliese436: { hip: 57087 }, naos: { hip: 39429 },
   'gamma-vel': { hip: 39953 }, sargas: { hip: 86228 }, 'gamma-cep': { hip: 116727 }, 'cor-caroli': { hip: 63125 },
+  // Stage E hosts: Cygnus X-1's donor star HDE 226868 and Stein 2051 A (white-dwarf companion).
+  'cyg-x1': { hip: 98298 }, stein2051: { hip: 21088 },
 };
 /** Corrections to HYG rows (HYG clamps proper motions at 9999.99 mas/yr and carries a few bad Hipparcos parallaxes). */
 const STAR_OVERRIDES: Record<number, Partial<{ dist: number; pmra: number; pmdec: number; rv: number; mag: number }>> = {

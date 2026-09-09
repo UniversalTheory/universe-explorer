@@ -17,6 +17,7 @@ import { CometVisual } from './Comet';
 import { WORLD_UNIT_KM } from '@/ephemeris/frames';
 import { StarCloud } from './StarCloud';
 import { DeepSkyObject, FAR_UNIT_KM } from './DeepSkyObject';
+import { BlackHoleObject, PulsarBeams } from './CompactObjects';
 import { DeepSkyCatalog } from '@/ephemeris/deepsky';
 
 /** Exoplanet systems are lit by their own star on this layer (the Sun's light stays on layer 0). */
@@ -34,9 +35,9 @@ const PRIORITY: Record<string, number> = {
 /** Minimum on-screen radius (px) enforced in visual scale mode. */
 const MIN_PX: Record<string, number> = {
   star: 9, planet: 5.5, dwarf: 3.5, moon: 3.2, asteroid: 2.4, comet: 2.4, interstellar: 2.4, spacecraft: 0,
-  exoplanet: 4, nebula: 0, cluster: 0, blackhole: 4, neutron: 3, region: 0,
+  exoplanet: 4, nebula: 0, cluster: 0, blackhole: 4, neutron: 3, region: 0, whitedwarf: 3,
 };
-const ORBIT_REFRESH_DAYS: Record<string, number> = { planet: 20, dwarf: 30, moon: 0.75, tle: 0.02, exoplanet: 3650 };
+const ORBIT_REFRESH_DAYS: Record<string, number> = { planet: 20, dwarf: 30, moon: 0.75, tle: 0.02, exoplanet: 3650, binary: 36500 };
 
 interface OrbitEntry { line: OrbitLine; group: THREE.Group; parent: string; lastTT: number; isStatic: boolean }
 
@@ -47,8 +48,9 @@ export class Universe {
   readonly farCamera = new THREE.PerspectiveCamera(50, 1, 1e-4, 1e19 / FAR_UNIT_KM);
   readonly sun: SunObject;
   readonly bodies = new Map<string, BodyObject>();
-  /** Other stars drawn as spheres when close (their catalogue point is hidden meanwhile). */
-  readonly stars = new Map<string, SunObject>();
+  /** Other stars (and black holes) drawn as spheres when close (a star's catalogue point is hidden meanwhile). */
+  readonly stars = new Map<string, SunObject | BlackHoleObject>();
+  private beams = new Map<string, PulsarBeams>();
   /** Nebulae and clusters (photo cards / point clouds). */
   readonly dso = new Map<string, DeepSkyObject>();
   readonly orbits = new Map<string, OrbitEntry>();
@@ -104,11 +106,20 @@ export class Universe {
       this.farScene.add(o.group);
       return;
     }
-    if (def.type === 'star') {
+    if (def.type === 'blackhole') {
+      if (this.stars.has(def.id)) return;
+      const bh = new BlackHoleObject(def, def.accreting ?? false);
+      this.stars.set(def.id, bh);
+      this.scene.add(bh.group);
+      return;
+    }
+    if (def.type === 'star' || def.type === 'neutron') {
       if (this.stars.has(def.id)) return;
       const so = new SunObject(def, false);
       this.stars.set(def.id, so);
       this.scene.add(so.group);
+      if (def.spinSeconds) { const b = new PulsarBeams(def.spinSeconds); so.group.add(b.group); this.beams.set(def.id, b); }
+      if (def.parent && def.source.kind === 'binary') this.addOrbit(def);
       return;
     }
     if (this.bodies.has(def.id)) return;
@@ -124,6 +135,10 @@ export class Universe {
       obj.group.traverse((o) => o.layers.set(EXO_LAYER));
       obj.eclipse.uSunRadius.value = def.parent ? body(def.parent).radius : 695700;
     }
+    this.addOrbit(def);
+  }
+
+  private addOrbit(def: BodyDef) {
     const parent = def.parent ?? 'sun';
     const line = new OrbitLine(def.color, def.type === 'spacecraft' ? 0.22 : 0.3);
     const group = new THREE.Group();
@@ -263,10 +278,14 @@ export class Universe {
       const h = this.helio.get(id);
       const idx = st.def.source.kind === 'star' ? this.eph.starIndex(st.def.source.key) : undefined;
       if (!h || !settings.stars) { st.setVisible(false); st.screen.visible = false; if (idx !== undefined) this.starCloud.setHidden(idx, false); continue; }
+      if (!this.typeVisible(st.def, settings)) { st.setVisible(false); st.screen.visible = false; continue; }
       st.setVisible(true);
       this.worldFromHelio(h, st.group.position);
-      st.update(camPos, camera.quaternion, 0, pxPerRad, this.elapsed, pixelRatio);
+      const minPx = visual && st.def.compact ? MIN_PX[st.def.compact] ?? 3 : 0;
+      st.update(camPos, camera.quaternion, minPx / pxPerRad, pxPerRad, this.elapsed, pixelRatio);
       if (idx !== undefined) this.starCloud.setHidden(idx, st.sphereVisible);
+      const beam = this.beams.get(id);
+      if (beam) { beam.group.visible = st.sphereVisible; if (st.sphereVisible) beam.update(st.def.radius * st.displayScale * 40, this.elapsed); }
     }
     // One point light serves the active exoplanet system (the focused or selected one).
     const activeHost = this.activeExoHost(focusId, selectedId);
@@ -314,6 +333,8 @@ export class Universe {
   private typeVisible(def: BodyDef, s: SettingsState): boolean {
     switch (def.type) {
       case 'exoplanet': return s.exoplanets;
+      case 'blackhole': case 'neutron': return s.compact;
+      case 'star': return def.compact ? s.compact : true;
       case 'moon': return s.moons;
       case 'spacecraft': return s.spacecraft;
       case 'asteroid': case 'comet': case 'interstellar': return s.smallBodies;
@@ -346,13 +367,14 @@ export class Universe {
 
   private updateOrbits(t: SimTime, settings: SettingsState, camPos: THREE.Vector3, pxPerRad: number, focusId: string, selectedId: string | null) {
     for (const [id, o] of this.orbits) {
-      const obj = this.bodies.get(id)!;
-      const show = settings.orbits && obj.group.visible && obj.available;
-      if (!show) { o.line.setVisible(false); continue; }
+      const obj = this.bodies.get(id) ?? this.stars.get(id);
+      const show = !!obj && settings.orbits && obj.group.visible && obj.available;
+      if (!show || !obj) { o.line.setVisible(false); continue; }
       const def = obj.def;
       const highlighted = id === focusId || id === selectedId;
+      const binary = def.source.kind === 'binary';
       // Minor bodies and spacecraft only show their paths when selected or focused.
-      if (!highlighted && def.type !== 'planet' && def.type !== 'dwarf' && def.type !== 'moon' && def.type !== 'exoplanet') { o.line.setVisible(false); continue; }
+      if (!highlighted && !binary && def.type !== 'planet' && def.type !== 'dwarf' && def.type !== 'moon' && def.type !== 'exoplanet') { o.line.setVisible(false); continue; }
       // Position the orbit at its parent.
       this.worldPosition(o.parent, o.group.position);
       // Hide orbits that would be sub-pixel clutter (moon orbits below 12 px; heliocentric ones below 3 px when zoomed out to the stars).
@@ -363,7 +385,7 @@ export class Universe {
         if (sizePx < (def.parent ? 12 : 3)) { o.line.setVisible(false); continue; }
       }
       // Refresh curve when stale.
-      const refresh = o.isStatic ? Infinity : ORBIT_REFRESH_DAYS[def.source.kind === 'tle' ? 'tle' : def.type] ?? 5;
+      const refresh = o.isStatic ? Infinity : ORBIT_REFRESH_DAYS[def.source.kind === 'tle' ? 'tle' : def.source.kind === 'binary' ? 'binary' : def.type] ?? 5;
       if (o.lastTT === -Infinity || Math.abs(t.tt - o.lastTT) > refresh) {
         const curve = this.eph.orbitCurve(id, t);
         if (curve) o.line.setPoints(curve.points);

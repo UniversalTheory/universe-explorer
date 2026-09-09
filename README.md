@@ -33,7 +33,7 @@ the first load.
 - Spacecraft: Voyager 1 and 2, Pioneer 10 and 11, New Horizons, JWST, Parker Solar Probe, Europa
   Clipper, Psyche, plus the ISS and Hubble around Earth.
 - Asteroid belt, Jupiter-region and Kuiper belt / scattered disc as 15,000 Keplerian particles
-  propagated on the GPU, and 108,000 real stars in 3D at their measured distances (330,000 with the on-demand deep tier), moving with their proper motions, every confirmed exoplanet (6,300+, NASA Exoplanet Archive) on Keplerian orbits with real transit phases, 90 nebulae, supernova remnants and star clusters at their true distances and sizes, over the ESO Milky Way panorama in
+  propagated on the GPU, and 108,000 real stars in 3D at their measured distances (330,000 with the on-demand deep tier), moving with their proper motions, every confirmed exoplanet (6,300+, NASA Exoplanet Archive) on Keplerian orbits with real transit phases, 90 nebulae, supernova remnants and star clusters at their true distances and sizes, black holes, pulsars and white dwarfs with their companions on measured binary orbits (S2 around Sagittarius A*, Sirius B, Alpha Centauri), over the ESO Milky Way panorama in
   correct galactic orientation.
 
 **Physics and fidelity**

@@ -21,6 +21,7 @@ export type EphemerisSource =
   | { kind: 'fixed'; pos: [number, number, number] } // constant heliocentric ECL position, km
   | { kind: 'star'; key: string }               // star catalogue (stars.bin) with proper motion
   | { kind: 'exoplanet'; key: string }          // NASA Exoplanet Archive planet (exoplanets.bin), Kepler orbit about the parent star
+  | { kind: 'binary'; el: import('@/ephemeris/binary').BinaryElements; phaseKnown?: boolean }  // companion on a sky-plane Kepler orbit about the parent
   | { kind: 'planet'; aeBody: string }          // astronomy-engine heliocentric body
   | { kind: 'moon-ae'; aeBody: string }         // astronomy-engine geocentric (the Moon)
   | { kind: 'galilean'; index: 0 | 1 | 2 | 3 }  // astronomy-engine JupiterMoons
@@ -81,6 +82,11 @@ export interface BodyDef {
   lazy?: boolean;
   /** Set for auto-generated entries (exoplanet hosts/planets without curated text); search ranks them lower. */
   generated?: boolean;
+  /** Compact objects: kind, and for pulsars the spin period in seconds. */
+  compact?: 'blackhole' | 'neutron' | 'whitedwarf';
+  spinSeconds?: number;
+  /** Black holes: draw an accretion disc. */
+  accreting?: boolean;
 }
 
 const AE = (aeBody: string): EphemerisSource => ({ kind: 'planet', aeBody });

@@ -71,8 +71,8 @@ Stage progress (see `DECISIONS.md` P11–P14 for the scope):
 | B · 3D stars (108k-star standard tier + 221k deep tier, proper motion, star spheres, 115 curated stars, star search) | done 2026-09-09; `scripts/dev/stars-check.ts` passes, screenshots at 50 ly, Sirius, Proxima |
 | C · Exoplanets (6,325 planets / 4,741 hosts from the NASA Exoplanet Archive, lazy systems, own-star lighting, transit-epoch phases, ~90 curated write-ups) | done 2026-09-09; `scripts/dev/exoplanets-check.ts` passes (transit geometry, Kepler consistency) |
 | D · Deep sky (90 nebulae / remnants / clusters from OpenNGC with curated distances; 49 licence-checked Commons photos (9.5 MB) on sky-plane cards in a far scene; cluster point clouds) | done 2026-09-09; `scripts/dev/deepsky-check.ts` passes; Orion, Crab, Horsehead, Eagle, Omega Centauri screenshots checked |
-| E · Compact objects | next |
-| F · Galaxy model | planned |
+| E · Compact objects (15 black holes, 11 neutron stars, 4 white dwarfs, S2; measured binary orbits for Sirius B, Procyon B, Alpha Cen B, S2; accretion-disc and pulsar-beam rendering) | done 2026-09-09; `scripts/dev/compact-check.ts` passes |
+| F · Galaxy model | next |
 | G · Polish & docs | planned |
 
 Known issues introduced or exposed by Stage A:
@@ -93,4 +93,7 @@ Known issues introduced or exposed by Stage A:
   is not applied. Cluster point clouds are statistical (Plummer profile), not the real members. Distances are
   literature values rounded to two or three figures. Kepler's SNR has no acceptable Commons photo yet (drawn as a glow);
   the Heart and Soul share one wide-field photo; a few pictures are infrared or composite (Trifid, Pacman, Southern Ring).
+- X-ray binaries and the Gaia black holes are drawn with unmeasured node angles and phases (flagged); 40 Eri B and
+  Stein 2051 B have approximate orbits. Pulsar beams turn no faster than once per 0.35 s for display. Black-hole lensing
+  of background stars is not rendered (only the photon ring and disc).
 

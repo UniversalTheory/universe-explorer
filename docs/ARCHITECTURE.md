@@ -54,6 +54,9 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/ephemeris/stars.ts` | `StarCatalog`: star positions + space velocities from `stars.bin`, linear motion in time; B−V colour helper |
 | `src/ephemeris/exoplanets.ts` | `ExoCatalog` + Keplerian state of a planet about its host in the sky frame (east, north, toward observer) |
 | `src/ephemeris/deepsky.ts` | `DeepSkyCatalog`: fixed positions and physical sizes of nebulae / remnants / clusters from `deepsky.json` |
+| `src/ephemeris/binary.ts` | Visual/spectroscopic binary orbits in the sky frame (north, east, toward observer); separation / position angle; Schwarzschild radius |
+| `src/data/compact.ts` | Black holes, neutron stars, white dwarfs and their companions with masses, spins and orbital elements; S2; Alpha Cen B binding |
+| `src/render/CompactObjects.ts` | `BlackHoleObject` (shadow, photon ring, accretion disc, far glow) and `PulsarBeams` |
 | `src/ephemeris/orbit-elements.ts` | osculating elements from a state vector (for drawing planet/moon orbits) |
 | `src/ephemeris/Ephemeris.ts` | facade + per-frame cache; loads `public/data` |
 | `src/ephemeris/types.ts` | shape of `public/data/ephemeris.json` |
@@ -267,4 +270,30 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
 - **Bodies**: `buildDeepSkyBodies` registers them at boot with `source: { kind: 'fixed' }`, `radius` = physical
   semi-major axis, type `nebula` or `cluster` (no minimum pixel size); labels appear above 2.5 px apparent radius.
 - **Verification**: `scripts/dev/deepsky-check.ts` (positions, Orion at 1.5° from the Sun, licences).
+
+## Compact objects (Phase 2, Stage E)
+
+- **Catalogue** (`src/data/compact.ts`, all inline, no pipeline): 15 black holes (Sgr A*, Cygnus X-1, V404 Cygni,
+  GRS 1915+105, A0620-00, XTE J1118+480, GRO J1655-40, MAXI J1820+070, V4641 Sgr, Gaia BH1/2/3, SS 433, Cygnus X-3,
+  4U 1543-47), 11 neutron stars (Crab and Vela pulsars, PSR B1919+21, Geminga, PSR J0437-4715, the Hulse–Taylor binary,
+  the double pulsar, SGR 1806-20, RX J1856.5-3754, Scorpius X-1, Hercules X-1; PSR B1257+12 is retyped from its exoplanet
+  host entry), 4 white dwarfs (Sirius B, Procyon B, 40 Eridani B, Stein 2051 B) and the star S2. Positions are HYG rows
+  through star keys where the system is a catalogued star (Cyg X-1 = HDE 226868, Stein 2051 A), otherwise fixed
+  RA/Dec/distance. Radii default to the Schwarzschild radius (black holes), 12 km (neutron stars) or 0.012 R☉.
+- **Binary orbits** (`src/ephemeris/binary.ts`, source `{ kind: 'binary', el, phaseKnown }`): the companion moves on a
+  Kepler orbit about its parent with elements in the visual-binary convention (Ω from north through east, i to the sky
+  plane, ω of the companion), sky frame x = north, y = east, z = toward the observer; the parent's heliocentric state is
+  added by `Ephemeris.state`. Measured full orbits: Sirius B, Procyon B, Alpha Centauri B (now bound to A instead of a
+  free HYG row), S2 about Sgr A*. X-ray binaries and the Gaia black holes have period, masses and inclination from the
+  literature; their semi-major axis comes from Kepler's law, node and phase are unmeasured and flagged. 40 Eri B and
+  Stein 2051 B get approximate wide circular orbits, flagged.
+- **Rendering**: `BlackHoleObject` = black sphere of the shadow radius (exaggerated to `MIN_PX.blackhole` = 4 px in visual
+  mode), camera-facing photon ring, and for accreting systems a tilted additive accretion disc (r⁻² brightness, orbiting
+  streaks, Doppler asymmetry); a point sprite marks it when small. Neutron stars and white dwarfs are `SunObject`s with a
+  minimum pixel size (`def.compact`) and, for pulsars, `PulsarBeams`: two additive cones on a magnetic axis tilted 34°
+  from the spin axis, rotating at the spin period but no faster than one turn per 0.35 s for display.
+- **Info panel**: type (supermassive / stellar-mass black hole, pulsar / millisecond pulsar / magnetar, white dwarf),
+  mass, event-horizon radius, spin, current separation and position angle of binary companions, flags for unmeasured
+  node/phase. `scripts/dev/compact-check.ts` verifies Sirius B's separation, S2's 2018 periastron (120 AU, 7,650 km/s) and
+  Alpha Cen B's 2035 periastron.
 
