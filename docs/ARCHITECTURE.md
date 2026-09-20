@@ -61,7 +61,10 @@ UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + Eve
 | `src/data/compact.ts` | Black holes, neutron stars, white dwarfs and their companions with masses, spins and orbital elements; S2; Alpha Cen B binding |
 | `src/render/CompactObjects.ts` | `BlackHoleObject` (shadow, photon ring, accretion disc, far glow) and `PulsarBeams` |
 | `src/data/galaxy.ts` | Galaxy parameters (R₀, Reid 2019 arms, disc/bulge/bar), Galactic-frame conversions, schematic regions and arm labels |
-| `src/render/GalaxyModel.ts` | 275k-point disc / bulge / bar / arm model in the far scene + optional artwork map plane |
+| `src/render/GalaxyModel.ts` | the galaxy's `THREE.Points` in the far scene + optional artwork map plane; asks the worker for its buffers |
+| `src/render/galaxy-gen.ts` | point generation for the model (DOM- and Three-free, so it runs in a worker) |
+| `src/render/galaxy.worker.ts` | runs `galaxy-gen` off the main thread and transfers the buffers back |
+| `src/data/event-tables.ts` | meteor showers and notable dates; separate from `catalog.ts` so the events worker stays small |
 | `src/render/RegionObject.ts` | Wireframe shells, rings and curves for the heliopause, Oort cloud, Local Bubble, Gould Belt, Radcliffe Wave |
 | `src/ephemeris/orbit-elements.ts` | osculating elements from a state vector (for drawing planet/moon orbits) |
 | `src/ephemeris/Ephemeris.ts` | facade + per-frame cache; loads `public/data` |
@@ -166,7 +169,8 @@ panel open, the view is shifted so the body sits in the upper part (`screenShift
 
 ## Events
 
-`computeEvents(startMs, horizonDays)` runs in a Worker (~0.2 s for 3 years): moon quarters, lunar/solar
+`computeEvents(startMs, horizonDays)` runs in a Worker (~0.2 s for 3 years; its bundle is astronomy-engine plus
+`src/data/event-tables.ts` and nothing else — importing `catalog.ts` would drag the star and exoplanet catalogues in): moon quarters, lunar/solar
 eclipses (`SearchLunarEclipse`, `SearchGlobalSolarEclipse`), seasons, oppositions/conjunctions
 (`SearchRelativeLongitude`), max elongations, Earth apsides, supermoons (full Moon within 1.2 d of
 perigee), transits, planet–planet conjunctions (< 2.5°, daily scan + ternary refinement, skipped when
@@ -239,8 +243,12 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
   a periastron epoch or a transit midpoint (transit ⇔ ν = 90° − ω); otherwise periastron is placed at J2000 and flagged.
   The mean motion uses the archive period exactly (gm is back-derived from a and P). Position is relative to the host,
   and `Ephemeris.state` adds the host's heliocentric state, so proper motion carries the whole system.
+- **Loading**: `exoplanets.json` + `.bin` (1.06 MB) are *not* fetched by `Ephemeris.load`. `App` calls
+  `Ephemeris.loadExoplanets()` at the first idle after boot; when it resolves, the bodies are registered, the search list is
+  replaced (`TopBar.setBodies`), `retypeExoplanetHosts()` turns PSR B1257+12 back into a pulsar, and a `#planet` deep link
+  that could not resolve at boot is retried. `eph.exo` is null until then, and `Ephemeris.exoplanet()` returns null safely.
 - **Bodies**: `buildExoplanetBodies` registers ~4,700 host `BodyDef`s (unless the host is a curated star) and 6,300
-  planet defs at boot (`registerBodies`), all `lazy`: the renderer creates a system's `SunObject` + `BodyObject`s only
+  planet defs (`registerBodies`), all `lazy`: the renderer creates a system's `SunObject` + `BodyObject`s only
   when something in it is selected or focused (`Universe.ensure`). Planet skins: `classify` by radius/temperature into
   lava / rocky / temperate / icy / super-Earth / mini-Neptune / Neptune / hot Jupiter / gas giant, each a procedural skin
   with a per-planet hue variation.
@@ -311,7 +319,12 @@ ring. URL hash `#<bodyId>` selects and flies to a body on load.
   kpc, bar half-length 5 kpc at 28° (Bland-Hawthorn & Gerhard 2016); Sun 20.8 pc above the plane. Azimuth β is
   Galactocentric, 0 toward the Sun, increasing with longitude; `galactoToEcl(R, β, z)` maps model coordinates to the
   world frame through the Sun-centred Galactic frame (x̂ → centre, ŷ → l = 90°, ẑ → NGP) and GAL→EQJ→ECL.
-- **Model** (`GalaxyModel`, far scene): ~275k additive point sprites (halved on low quality) generated deterministically:
+- **Model** (`GalaxyModel`, far scene): ~300k additive point sprites (halved on low quality) generated deterministically
+  in `galaxy-gen.ts`, which runs inside `galaxy.worker.ts` — the buffers are transferred back and dropped straight into the
+  geometry, so the 122 ms of generation never touches the boot thread. `GalaxyModel.request()` is called at the first idle
+  after boot and again if the camera passes 1e14 km from the Sun; both are idempotent and the model simply draws nothing
+  until its points arrive. Arm colours are converted sRGB → linear in the generator, matching `THREE.Color` exactly. The
+  model contains:
   thin disc (exponential, mild warp beyond 10 kpc), thick disc, bulge, bar, and the arms as Gaussian ribbons weighted by
   arc length with 2.5% pink H II sprites and a dimmer, redder inner (dust-lane) edge. The fits cover only the measured
   azimuths (mostly our side of the Galaxy); each arm is extrapolated 240° further with its outer pitch angle, drawn

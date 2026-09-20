@@ -20,6 +20,10 @@ node scripts/dev/snap.mjs out.png --wait=18000 --eval="app.jumpTo('galaxy'); 1" 
 node scripts/dev/snap.mjs out.png --wait=18000 --eval="app.flyTo('sun', 1e15); 1" --after=5000  # any camera distance in km
 ```
 
+```bash
+node scripts/dev/boot-profile.mjs                # what boot costs: long tasks, galaxy generation, catalogue sizes
+```
+
 `snap.mjs` prints deduplicated console/worker logs, including full Three.js shader compile errors.
 `window.app` (an `App` instance) is exposed in the page; useful members: `app.cam` (CameraController),
 `app.universe.bodies.get(id)` (BodyObject), `app.eph` (Ephemeris), `app.clock`, `app.settings`,
@@ -27,6 +31,15 @@ node scripts/dev/snap.mjs out.png --wait=18000 --eval="app.flyTo('sun', 1e15); 1
 
 Under SwiftShader: page boot 10–18 s, ~2 fps, several parallel captures slow each other down. Always use
 `--wait ≥ 16000`. Screenshots reflect *local* time on the time bar.
+
+Two traps when scripting the page:
+
+- `index.html` has `<div id="app">`, so `window.app` is that element until `main.ts` overwrites it. Wait for
+  `window.app?.universe`, never `window.app`.
+- A dynamic `import('/src/data/catalog.ts')` from an eval can resolve to a *second* module instance (Vite versions
+  its own imports), whose `BODIES` has none of the boot registrations. Read state through `window.app` instead.
+- Wall-clock boot time under SwiftShader is ~8 s of GL setup and tells you nothing about main-thread cost. Compare
+  constructor timings or `longtask` entries.
 
 ## Verification scripts
 
@@ -50,6 +63,7 @@ npm run data:build                           # everything (≈5 min; Horizons is
 npm run data:build -- --only=tle             # fresh ISS/Hubble TLEs (do this most often)
 npm run data:build -- --only=moons           # refit moons (20-year arcs around EPOCH_JD)
 npm run data:build -- --only=stars           # HYG v4.1 (34 MB) + AT-HYG m10 (28 MB) + Exoplanet Archive (3 MB) downloads, cached in node_modules/.cache; rebuilds stars + exoplanets together
+rm node_modules/.cache/pscomppars.csv        # the cache never expires: delete it to actually pull new exoplanets
 npm run data:textures                        # planet textures; skips files already present
 npm run data:deepsky-images [id …]           # Commons imagery for the deep-sky list (slow, ~16 s per object); then data:build -- --only=deepsky
 ```

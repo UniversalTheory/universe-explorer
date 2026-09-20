@@ -190,11 +190,19 @@ function toDef(c: Compact): BodyDef[] {
   return out;
 }
 
+/**
+ * PSR B1257+12 arrives as an ordinary exoplanet host; it is a millisecond pulsar. The exoplanet
+ * catalogue loads after boot, so this runs again once those bodies are registered.
+ */
+export function retypeExoplanetHosts() {
+  const psr = BODY_MAP.get('x-psr-b1257-12');
+  if (psr) { psr.type = 'neutron'; psr.compact = 'neutron'; psr.spinSeconds = 0.00622; psr.radius = 12; psr.color = '#cfe0ff'; }
+}
+
 /** Mutations on bodies registered earlier (curated stars, exoplanet hosts) plus the new compact bodies. */
 export function buildCompactBodies(): BodyDef[] {
   bindAlphaCenB();
-  const psr = BODY_MAP.get('x-psr-b1257-12');
-  if (psr) { psr.type = 'neutron'; psr.compact = 'neutron'; psr.spinSeconds = 0.00622; psr.radius = 12; psr.color = '#cfe0ff'; }
+  retypeExoplanetHosts();
   const defs: BodyDef[] = [];
   for (const c of [...BH, ...NS, ...WD]) defs.push(...toDef(c));
   defs.push(S2);

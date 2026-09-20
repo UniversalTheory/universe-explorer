@@ -1,13 +1,12 @@
 /**
- * The Milky Way as a point-sprite model in the far scene (units of FAR_UNIT_KM), built from
- * the structural parameters in src/data/galaxy.ts: exponential thin and thick discs, a
- * Hernquist bulge, a bar at 28° to the Sun–centre line, and the Reid et al. 2019 spiral
- * arms as Gaussian ribbons of young blue stars with a sprinkling of pink H II regions.
+ * The Milky Way as a point-sprite model in the far scene (units of FAR_UNIT_KM): exponential thin
+ * and thick discs, a Hernquist bulge, a bar at 28° to the Sun–centre line, and the Reid et al. 2019
+ * spiral arms as Gaussian ribbons of young blue stars with a sprinkling of pink H II regions.
  *
- * Everything is generated in the Sun-centred Galactic frame relative to the Galactic centre
- * (x toward the Sun–centre line, y toward l = 90°, z toward the north Galactic pole) and
- * placed inside a group rotated into Three axes, so the model lines up with the real stars,
- * nebulae and Sgr A* that sit on top of it.
+ * The ~300,000 points are generated in `galaxy-gen.ts` inside a Web Worker (`request()`), because
+ * doing it inline costs ~130 ms on a desktop and more on a phone. Until the buffers arrive the model
+ * is simply empty; nothing else waits on it. The points sit in a group rotated into Three axes, so
+ * the model lines up with the real stars, nebulae and Sgr A* drawn on top of it.
  *
  * The optional map plane carries the NASA/JPL-Caltech/ESO/R. Hurt artist's impression
  * (CC BY 4.0), scaled so the Sun sits about 8 kpc from the centre. Its scale and
@@ -16,15 +15,13 @@
 import * as THREE from 'three';
 import { EQJ_TO_ECL, GAL_TO_EQJ, KPC_KM } from '@/ephemeris/frames';
 import { mmul } from '@/core/math3';
-import { ARMS, armRadius, BAR_ANGLE_DEG, BAR_HALF_KPC, R0_KPC, type ArmSpec } from '@/data/galaxy';
+import { R0_KPC } from '@/data/galaxy';
 import { FAR_UNIT_KM } from './DeepSkyObject';
+import { generateGalaxy, type GalaxyBuffers } from './galaxy-gen';
 import { GALAXY_FRAG, GALAXY_VERT } from './shaders';
 import { loadTexture } from './Textures';
 
 const KPC = KPC_KM / FAR_UNIT_KM;   // far units per kpc
-
-function rng(seed: number) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 1000000) / 1000000; }; }
-function gauss(r: () => number) { const u = Math.max(1e-9, r()), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 
 /** Galactic-frame rotation (P · EQJ_TO_ECL · GAL_TO_EQJ · Pᵀ), as in Starfield. */
 export function galacticQuaternion(): THREE.Quaternion {
@@ -43,88 +40,16 @@ export class GalaxyModel {
   private map?: THREE.Mesh;
   private mapMat?: THREE.MeshBasicMaterial;
   private mapRequested = false;
-  readonly count: number;
+  private generated?: Promise<void>;
+  /** Points in the model; 0 until the worker delivers. */
+  count = 0;
 
-  constructor(quality: 'high' | 'low', pixelRatio: number) {
+  constructor(private quality: 'high' | 'low', pixelRatio: number) {
     this.group.quaternion.copy(galacticQuaternion());
-    const q = quality === 'high' ? 1 : 0.5;
-    const N = { thin: 150000 * q, thick: 20000 * q, bulge: 18000 * q, bar: 16000 * q, arms: 110000 * q };
-    const total = Math.round(N.thin + N.thick + N.bulge + N.bar + N.arms);
-    const pos = new Float32Array(total * 3), col = new Float32Array(total * 3), size = new Float32Array(total), alpha = new Float32Array(total);
-    const r = rng(20260909);
-    let i = 0;
-    // The group's quaternion maps *Three-permuted* Galactic coordinates (gx, gz, −gy) to world axes (as the
-    // panorama sphere does), so store points that way.
-    const put = (x: number, y: number, z: number, c: [number, number, number], s: number, a: number) => {
-      pos[i * 3] = x * KPC; pos[i * 3 + 1] = z * KPC; pos[i * 3 + 2] = -y * KPC;
-      col[i * 3] = c[0]; col[i * 3 + 1] = c[1]; col[i * 3 + 2] = c[2];
-      size[i] = s; alpha[i] = a; i++;
-    };
-    // Galactocentric cylindrical → frame relative to the centre: (−R cos β, R sin β, z).
-    const cyl = (R: number, betaRad: number, z: number, c: [number, number, number], s: number, a: number) => put(-R * Math.cos(betaRad), R * Math.sin(betaRad), z, c, s, a);
-    const jitter = (c: [number, number, number], k = 0.08): [number, number, number] => [c[0] + gauss(r) * k, c[1] + gauss(r) * k, c[2] + gauss(r) * k];
-
-    // Thin disc: exponential, scale length 2.6 kpc, scale height 0.3 kpc, truncated at 15 kpc, mildly warped beyond 10 kpc.
-    for (let k = 0; k < N.thin; k++) {
-      let R = -2.6 * Math.log(Math.max(1e-9, r()));
-      while (R > 15 || R < 0.5) R = -2.6 * Math.log(Math.max(1e-9, r()));
-      const b = r() * 2 * Math.PI;
-      const warp = R > 10 ? 0.15 * ((R - 10) / 5) ** 2 * Math.sin(b + 0.6) : 0;
-      cyl(R, b, gauss(r) * 0.3 * (1 + R / 20) + warp, jitter([1.0, 0.92, 0.78]), 0.6 + r() * 0.7, 0.16 * Math.min(1, R / 3));
-    }
-    // Thick disc: scale length 2.0, height 0.9, older / redder, sparser.
-    for (let k = 0; k < N.thick; k++) {
-      let R = -2.0 * Math.log(Math.max(1e-9, r()));
-      while (R > 14) R = -2.0 * Math.log(Math.max(1e-9, r()));
-      cyl(R, r() * 2 * Math.PI, gauss(r) * 0.9, jitter([1.0, 0.85, 0.65]), 0.6 + r() * 0.6, 0.2);
-    }
-    // Bulge: Hernquist profile, a = 0.7 kpc, flattened 0.6, truncated at 3 kpc.
-    for (let k = 0; k < N.bulge; k++) {
-      let rad = Infinity;
-      while (rad > 3) { const u = r(); const s = Math.sqrt(u); rad = (0.7 * s) / (1 - s + 1e-6); }
-      const th = Math.acos(2 * r() - 1), ph = r() * 2 * Math.PI;
-      put(rad * Math.sin(th) * Math.cos(ph), rad * Math.sin(th) * Math.sin(ph), rad * Math.cos(th) * 0.6, jitter([1.0, 0.86, 0.6]), 0.7 + r() * 0.8, 0.12);
-    }
-    // Bar: half-length 5 kpc at BAR_ANGLE from the Sun–centre line (near end toward positive longitudes).
-    const bAng = (BAR_ANGLE_DEG * Math.PI) / 180;
-    for (let k = 0; k < N.bar; k++) {
-      const s = (r() * 2 - 1) * BAR_HALF_KPC * Math.sqrt(r());
-      const across = gauss(r) * 0.6 * (1 - 0.5 * Math.abs(s) / BAR_HALF_KPC), zz = gauss(r) * 0.4;
-      // Bar axis direction in the frame: azimuth β = BAR_ANGLE.
-      const ax = -Math.cos(bAng), ay = Math.sin(bAng);
-      put(s * ax - across * ay, s * ay + across * ax, zz, jitter([1.0, 0.88, 0.66]), 0.7 + r() * 0.8, 0.16);
-    }
-    // Arms: Gaussian ribbons; density ∝ weight × arc length. Young blue stars + pink H II regions.
-    // The fits cover only the azimuths where masers were measured (mostly the Sun's side of the Galaxy); beyond
-    // them each arm is *extrapolated* with its outer pitch angle for a further 240° (and 60° inward), drawn dimmer
-    // and without H II regions, and truncated between 2.5 and 15 kpc. The far side of the Milky Way is a guess.
-    const EXT_OUT = 240, EXT_IN = 60;
-    const armLen = (a: ArmSpec, b0: number, b1: number) => { let L = 0; for (let b = b0; b < b1; b += 1) { const R1 = armRadius(a, b), R2 = armRadius(a, b + 1); L += Math.hypot(R2 - R1, ((R1 + R2) / 2) * (Math.PI / 180)); } return L; };
-    const ranges = ARMS.map((a) => (a.id === 'arm-3kpc' ? [a.betaMin, a.betaMax] : [a.betaMin - EXT_IN, a.betaMax + EXT_OUT]));
-    const weights = ARMS.map((a, i) => a.weight * armLen(a, ranges[i][0], ranges[i][1]));
-    const wsum = weights.reduce((x, y) => x + y, 0);
-    ARMS.forEach((a, ai) => {
-      const n = Math.round((N.arms * weights[ai]) / wsum);
-      const c = new THREE.Color(a.color);
-      const [b0, b1] = ranges[ai];
-      for (let k = 0; k < n; k++) {
-        const beta = b0 + r() * (b1 - b0);
-        const fitted = beta >= a.betaMin && beta <= a.betaMax;
-        const R0 = armRadius(a, beta);
-        if (R0 < 2.5 || R0 > 15) continue;
-        const R = R0 + gauss(r) * a.width * (fitted ? 1 : 1.6);
-        const hii = fitted && r() < 0.025;
-        const inner = R < R0;   // dust lane on the inner (concave) edge: slightly dimmer and redder
-        const colour: [number, number, number] = hii ? [1.0, 0.55, 0.7] : inner ? [c.r * 0.9, c.g * 0.8, c.b * 0.75] : [c.r, c.g, c.b];
-        cyl(R, (beta * Math.PI) / 180, gauss(r) * 0.08, jitter(colour, 0.05), hii ? 2.4 + r() * 1.6 : 0.7 + r() * 0.9, (hii ? 0.7 : fitted ? 0.38 : 0.24) * Math.min(1, R / 4));
-      }
-    });
-    this.count = i;
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, i * 3), 3));
-    geo.setAttribute('aColor', new THREE.BufferAttribute(col.subarray(0, i * 3), 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(size.subarray(0, i), 1));
-    geo.setAttribute('aAlpha', new THREE.BufferAttribute(alpha.subarray(0, i), 1));
+    for (const [name, items] of [['position', 3], ['aColor', 3], ['aSize', 1], ['aAlpha', 1]] as [string, number][]) {
+      geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(0), items));
+    }
     this.material = new THREE.ShaderMaterial({
       vertexShader: GALAXY_VERT, fragmentShader: GALAXY_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { uPixelRatio: { value: pixelRatio }, uPxPerRad: { value: 1000 }, uOpacity: { value: 0 }, uKpc: { value: KPC } },
@@ -133,6 +58,37 @@ export class GalaxyModel {
     this.points.frustumCulled = false;
     this.points.renderOrder = -3;
     this.group.add(this.points);
+  }
+
+  /**
+   * Start generating the points off the main thread. Idempotent, and safe to call before the model is
+   * needed: `update` shows nothing until the buffers land. Falls back to generating inline if the
+   * browser refuses the worker.
+   */
+  request(): Promise<void> {
+    this.generated ??= new Promise<void>((resolve) => {
+      let worker: Worker;
+      try {
+        worker = new Worker(new URL('./galaxy.worker.ts', import.meta.url), { type: 'module' });
+      } catch {
+        this.fill(generateGalaxy(this.quality, KPC));
+        resolve();
+        return;
+      }
+      worker.onmessage = (e: MessageEvent<GalaxyBuffers>) => { this.fill(e.data); worker.terminate(); resolve(); };
+      worker.onerror = () => { this.fill(generateGalaxy(this.quality, KPC)); worker.terminate(); resolve(); };
+      worker.postMessage({ quality: this.quality, kpc: KPC });
+    });
+    return this.generated;
+  }
+
+  private fill(b: GalaxyBuffers) {
+    const geo = this.points.geometry;
+    geo.setAttribute('position', new THREE.BufferAttribute(b.pos, 3));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(b.col, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(b.size, 1));
+    geo.setAttribute('aAlpha', new THREE.BufferAttribute(b.alpha, 1));
+    this.count = b.count;
   }
 
   /** Lazily add the artwork map plane (34 kpc across, in the Galactic plane, Sun toward image-bottom). */
@@ -164,7 +120,7 @@ export class GalaxyModel {
     this.material.uniforms.uPxPerRad.value = pxPerRad;
     this.material.uniforms.uPixelRatio.value = pixelRatio;
     this.material.uniforms.uOpacity.value = opacity;
-    this.points.visible = showPoints && opacity > 0.003;
+    this.points.visible = showPoints && opacity > 0.003 && this.count > 0;
     if (showMap) this.ensureMap();
     if (this.map && this.mapMat) { this.map.visible = showMap && opacity > 0.003; this.mapMat.opacity = 0.7 * opacity; }
   }

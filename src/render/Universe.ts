@@ -336,6 +336,8 @@ export class Universe {
     }
     // Galaxy model: fades in between ~100 ly and ~1 kpc from the Sun (the panorama fades out over the same range).
     const sunDistKm = sunWorld.distanceTo(camPos);
+    // Generation runs in a worker; ask for it a decade of distance before the fade starts so it is ready in time.
+    if (sunDistKm > 1e14) void this.galaxy.request();
     const galaxyFade = Math.min(1, Math.max(0, (Math.log10(Math.max(sunDistKm, 1)) - 15) / 1.5));
     this.worldFromHelio(this.gcHelio, _gc).multiplyScalar(1 / FAR_UNIT_KM);
     this.galaxy.setVisible(galaxyFade > 0 && (settings.galaxy || settings.galaxyMap));

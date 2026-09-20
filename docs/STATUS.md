@@ -67,8 +67,9 @@
 
 ## Phase 2 — Milky Way (2026-09-09)
 
-Scope and decisions: `DECISIONS.md` P11–P15, T20–T28. Stages A–F are built, verified and pushed (commits c97d528,
-dd61c1c, 8beb44b, 61cb099, 2300644). **Stage G (polish) is on hold until the owner has reviewed A–F.**
+Scope and decisions: `DECISIONS.md` P11–P16, T20–T31. Stages A–F are built, verified and pushed (commits c97d528,
+dd61c1c, 8beb44b, 61cb099, 2300644). **Stage G started on 2026-09-20 with the owner's approval, performance first**
+(P16); the performance items below are done, the rest of Stage G is still open.
 
 ### Delivered (Stages A–F)
 
@@ -81,10 +82,25 @@ dd61c1c, 8beb44b, 61cb099, 2300644). **Stage G (polish) is on hold until the own
 | E · Compact objects | 15 black holes, 11 neutron stars, 4 white dwarfs, S2; binary-orbit ephemeris (Sirius B, Procyon B, Alpha Cen B bound to A, S2 around Sgr A*; X-ray binaries with flagged unknowns); black-hole shadow / photon ring / accretion disc, pulsar beams | `scripts/dev/compact-check.ts` |
 | F · Galaxy | ~300k-point disc / bulge / bar / arm model from Reid et al. 2019 (verified against the published table) in the far scene, cross-fade with the panorama, optional artwork map plane, schematic regions (heliopause, Oort cloud, Local Interstellar Cloud, Local Bubble, Gould Belt, Radcliffe Wave) and arm labels, galactic time rates with the Solar System hidden | `scripts/dev/galaxy-check.ts` |
 
-Numbers: site ≈ 116 MB built (data 15 MB, textures 96 MB); main bundle 780 KB (230 KB gzipped) + 141 KB worker;
-boot fetches ephemeris.json, stars.bin (4.5 MB), exoplanets.json/.bin (1.1 MB), deepsky.json; the deep star tier
-(8.8 MB), nebula photos and the galaxy map load on demand. `npm run check` runs all five check scripts; `npm test`
-still compares the Solar System against Horizons.
+Numbers (2026-09-20): site ≈ 116 MB built (data 15 MB, textures 96 MB); main bundle 827 KB (245 KB gzipped),
+events worker 70.6 KB, galaxy worker 5 KB. Boot fetches ephemeris.json, stars.bin (4.5 MB) and deepsky.json;
+the exoplanet catalogue (1.06 MB), the galaxy model, the deep star tier (8.8 MB), nebula photos and the galaxy map
+all load after boot or on demand. `npm run check` runs all five check scripts; `npm test` still compares the Solar
+System against Horizons; `node scripts/dev/boot-profile.mjs` reports what boot costs.
+
+### Stage G · performance (done 2026-09-20)
+
+| Change | Effect | How it was measured |
+| --- | --- | --- |
+| Galaxy model generated in a Web Worker (`galaxy-gen.ts` + `galaxy.worker.ts`), requested at first idle or when the camera passes 1e14 km | `new Universe(eph, 'high', 1)` 175 ms → 53 ms; 300k points now cost the main thread nothing | three runs of each, same page, generation stashed in and out (`scripts/dev/boot-profile.mjs`) |
+| Exoplanet catalogue fetched after boot (`Ephemeris.loadExoplanets`) instead of inside `Ephemeris.load` | 1.06 MB off the boot path; search, the PSR B1257+12 retype and `#planet` deep links catch up when it arrives | deep link `#trappist-1-e`, exoplanet search and the pulsar's info panel verified headlessly |
+| Events worker takes its tables from `src/data/event-tables.ts`, not `catalog.ts` | worker bundle 141.2 KB → 70.6 KB | `npm run build` |
+
+Arm colours in the worker are converted sRGB → linear by hand; verified bit-identical to the `THREE.Color`
+conversion they replaced, so the model renders exactly as before.
+
+Wall-clock boot time is *not* a useful check here: under headless SwiftShader it is dominated by an 8-second
+GL-setup long task that swamps a 122 ms saving. Measure the constructor, or main-thread long tasks, instead.
 
 ### Known issues and limitations (Phase 2)
 
@@ -110,21 +126,21 @@ Honesty flags shown in the app are listed here so nobody mistakes a model for a 
    still bright at the Galaxy zoom level.
 6. **Rendering**: two SwiftShader failure modes were found and worked around (world-sized quads beyond ~1e14 km
    rasterise as bow-ties / flat fills; hence point-sprite glows and the far scene). Real-GPU behaviour is unverified.
-7. **Performance (unmeasured on devices)**: the galaxy model (300k points) and star cloud (108k, +221k) are built at
-   boot on the main thread; the events worker bundle grew to 141 KB because it imports the catalogue.
+7. **Performance (unmeasured on devices)**: the galaxy model and the exoplanet catalogue are off the boot path and
+   the events worker no longer carries the catalogue (Stage G, above). The star cloud is still built at boot, which
+   measures 4 ms and is not worth moving. Nothing here has been measured on a real GPU or a phone.
 8. **UI**: labels can overlap panels and each other in dense views (arm labels near the bulge, cluster labels through
    foreground spheres); search shows up to 12 results without grouping; the time bar has no year-only display for
    dates far from now; deep-sky and exoplanet layers have no loading indicator.
 
-### Stage G — polish (pending owner approval)
+### Stage G — polish (in progress)
 
-Proposed scope, to be confirmed by the owner before work starts:
+Performance is done (above). Still open:
 
 - **Real-device QA**: desktop GPU, iPhone and Android: frame rate at each ladder step, pinch/rotate feel, memory with 8K
   planet textures plus the galaxy and star clouds. Decide the low-quality tier (already: halved galaxy/cluster points,
   deep tier off): add 2K-texture cap and optional galaxy-off on low-end devices.
-- **Performance**: move galaxy-model generation off the boot path (worker or first zoom-out); lazy-fetch
-  `exoplanets.json` on first use; keep the events worker free of the star/exoplanet catalogues (split `catalog.ts`).
+- ~~**Performance**~~ — done 2026-09-20, see the table above.
 - **Visual polish**: tame the bulge; dust lanes; better hot-star surfaces; apply position angles to nebula cards
   where the photo is north-up; replace the infrared / composite / missing nebula photos; label occlusion by
   foreground spheres; arm-label placement.

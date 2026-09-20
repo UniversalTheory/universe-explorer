@@ -42,9 +42,13 @@ export class Ephemeris {
     readonly satellites: Map<string, Satellite>,
     /** Star catalogue; scripts that only need Solar System bodies may omit it. */
     readonly stars: StarCatalog = new StarCatalog(new ArrayBuffer(0)),
-    readonly exo: ExoCatalog | null = null,
+    /** Null until `loadExoplanets` resolves (the app fetches the catalogue once boot is done). */
+    public exo: ExoCatalog | null = null,
     readonly deepSky: DeepSkyCatalog | null = null,
+    private base = 'data/',
   ) {}
+
+  private exoLoad?: Promise<ExoCatalog | null>;
 
   static async load(base = 'data/'): Promise<Ephemeris> {
     const data = (await (await fetch(base + 'ephemeris.json')).json()) as EphemerisData;
@@ -58,14 +62,24 @@ export class Ephemeris {
     const satellites = new Map<string, Satellite>();
     for (const [id, tle] of Object.entries(data.tle ?? {})) if (Array.isArray(tle)) satellites.set(id, new Satellite(tle));
     const stars = new StarCatalog(await (await fetch(base + data.stars.file)).arrayBuffer(), data.stars.stride);
-    let exo: ExoCatalog | null = null;
-    if (data.exoplanets) {
-      const [json, bin] = await Promise.all([fetch(base + data.exoplanets.file).then((r) => r.json() as Promise<ExoJson>), fetch(base + data.exoplanets.bin).then((r) => r.arrayBuffer())]);
-      exo = new ExoCatalog(json, bin);
-    }
     let deepSky: DeepSkyCatalog | null = null;
     if (data.deepSky) deepSky = new DeepSkyCatalog((await (await fetch(base + data.deepSky.file)).json()) as DsoJson);
-    return new Ephemeris(data, trajectories, satellites, stars, exo, deepSky);
+    return new Ephemeris(data, trajectories, satellites, stars, null, deepSky, base);
+  }
+
+  /**
+   * Fetch the exoplanet catalogue (≈ 1 MB of JSON + binary). Nothing in the Solar System needs it,
+   * so the app calls this once the first frames are out rather than blocking boot on it. Idempotent.
+   */
+  loadExoplanets(): Promise<ExoCatalog | null> {
+    this.exoLoad ??= (async () => {
+      const d = this.data.exoplanets;
+      if (!d) return null;
+      const [json, bin] = await Promise.all([fetch(this.base + d.file).then((r) => r.json() as Promise<ExoJson>), fetch(this.base + d.bin).then((r) => r.arrayBuffer())]);
+      this.exo = new ExoCatalog(json, bin);
+      return this.exo;
+    })();
+    return this.exoLoad;
   }
 
   /** Exoplanet record for a catalogue key (the archive planet name). */

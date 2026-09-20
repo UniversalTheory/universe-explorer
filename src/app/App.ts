@@ -3,10 +3,10 @@ import { Body, Illumination, MoonPhase } from 'astronomy-engine';
 import { Clock } from '@/core/Clock';
 import { Settings } from '@/core/Settings';
 import { vdot, vlen, vnorm, vscale, vsub, type Vec3 } from '@/core/math3';
-import { BODIES, body, registerBodies, type BodyDef } from '@/data/catalog';
+import { BODIES, BODY_MAP, body, registerBodies, type BodyDef } from '@/data/catalog';
 import { buildExoplanetBodies, classify, PLANET_CLASS_LABEL } from '@/data/exoplanets';
 import { buildDeepSkyBodies, DSO_KIND_LABEL } from '@/data/deepsky';
-import { buildCompactBodies } from '@/data/compact';
+import { buildCompactBodies, retypeExoplanetHosts } from '@/data/compact';
 import { armLabelBodies, REGIONS, R0_KPC, THETA0_KMS } from '@/data/galaxy';
 import { isGalacticRate } from '@/core/Clock';
 import { apparentSeparation, schwarzschildKm } from '@/ephemeris/binary';
@@ -67,7 +67,6 @@ export class App {
     configureTextures(renderer);
     const starfield = new Starfield();
     const [eph] = await Promise.all([Ephemeris.load('data/'), starfield.load()]);
-    if (eph.exo) registerBodies(buildExoplanetBodies(eph.exo));
     if (eph.deepSky) registerBodies(buildDeepSkyBodies(eph.deepSky));
     registerBodies(buildCompactBodies());
     registerBodies([...REGIONS, ...armLabelBodies()]);
@@ -117,6 +116,27 @@ export class App {
     if (hash && available.some((b) => b.id === hash)) { this.select(hash); this.flyTo(hash); }
     document.getElementById('loading')?.classList.add('done');
     requestAnimationFrame(() => this.frame());
+    // Both are worker / network work that boot does not need: start them once the first frames are out.
+    this.whenIdle(() => { void this.loadExoplanets(hash); void this.universe.galaxy.request(); });
+  }
+
+  /** Run after the browser has drawn the first frames, without holding boot up. */
+  private whenIdle(fn: () => void) {
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+    if (ric) ric(fn, { timeout: 2000 }); else setTimeout(fn, 400);
+  }
+
+  /**
+   * The exoplanet catalogue is ≈ 1 MB and nothing in the Solar System view needs it, so it is fetched
+   * after boot. Search, the compact-object overrides and a `#planet` deep link catch up when it lands.
+   */
+  private async loadExoplanets(hash: string) {
+    const exo = await this.eph.loadExoplanets().catch(() => null);
+    if (!exo) return;
+    registerBodies(buildExoplanetBodies(exo));
+    retypeExoplanetHosts();
+    this.topBar.setBodies(BODIES.filter((b) => this.eph.available(b)));
+    if (hash && !this.selectedId && BODY_MAP.has(hash)) { this.select(hash); this.flyTo(hash); }
   }
 
   private target(id: string): FocusTarget {

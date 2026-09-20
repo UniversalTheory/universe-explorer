@@ -57,6 +57,8 @@ export class TopBar {
   }
 
   focusSearch() { this.input.focus(); this.input.select(); }
+  /** Replace the searchable list (the exoplanet catalogue registers its bodies after boot). */
+  setBodies(bodies: BodyDef[]) { this.bodies = bodies; }
   /** Highlight the ladder step that matches the current camera distance (null = none). */
   setZoomView(view: ZoomView | null) {
     this.el.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === view));

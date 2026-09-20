@@ -47,7 +47,7 @@ the corner switches from kilometres to AU, light-years, parsecs and kiloparsecs 
   radial velocities as the clock runs, plus a 221,000-star deep tier (AT-HYG) fetched when you leave the
   Solar System. 116 curated stars have descriptions, aliases and physical data; fly to one and it becomes a
   sphere coloured by its spectral type. Barnard's Star closes to 3.75 light-years around AD 11,740.
-- **Exoplanets**: all 6,300+ confirmed planets from the NASA Exoplanet Archive, on Keplerian orbits about
+- **Exoplanets**: all 6,331 confirmed planets from the NASA Exoplanet Archive, on Keplerian orbits about
   their hosts with real phases where the archive has a transit or periastron epoch, so the panel can say
   when TRAPPIST-1 e next transits. Planets are lit by their own star and skinned by class (lava world,
   temperate rocky, super-Earth, mini-Neptune, hot Jupiter…). ~90 famous systems have hand-written text.
@@ -161,9 +161,10 @@ data refresh and how to add bodies or textures.
 
 ## Status and roadmap
 
-Phase 2 (the Milky Way) stages A–F are complete; the polish pass (Stage G: device QA, performance, visual and
-UI polish, CI) waits for the owner's review. See `docs/STATUS.md` for the full list of what exists, the
-honesty flags, and the backlog. After that:
+Phase 2 (the Milky Way) stages A–F are complete. Stage G (the polish pass) is under way: the performance work is
+done — the galaxy model is generated in a Web Worker, the exoplanet catalogue loads after boot, and the events
+worker no longer carries the body catalogue — and device QA, visual and UI polish and CI remain. See
+`docs/STATUS.md` for the full list of what exists, the honesty flags, and the backlog. After that:
 
 - Serverless proxy for live JPL Horizons data (fresh TLEs, more small bodies on demand)
 - More moons and small bodies; real maps for the moons that still use procedural textures

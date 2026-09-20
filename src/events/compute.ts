@@ -7,7 +7,7 @@ import {
   NextGlobalSolarEclipse, Seasons, SearchRelativeLongitude, SearchMaxElongation, SearchPlanetApsis, NextPlanetApsis,
   SearchLunarApsis, NextLunarApsis, SearchTransit, GeoVector, AngleBetween, Ecliptic, type AstroTime,
 } from 'astronomy-engine';
-import { METEOR_SHOWERS, NOTABLE_EVENTS } from '@/data/catalog';
+import { METEOR_SHOWERS, NOTABLE_EVENTS } from '@/data/event-tables';
 import { AU_KM } from '@/ephemeris/frames';
 import type { SkyEvent } from './types';
 

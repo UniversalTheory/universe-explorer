@@ -17,9 +17,10 @@ measured, nebulae sit at their true sizes, and the Galaxy's shape is a model tha
 Fully static site, no backend, free data and assets only, desktop + mobile, minimal "glass" UI.
 Owner: the user (GitHub `UniversalTheory`). Repo: https://github.com/UniversalTheory/universe-explorer
 
-**Where things stand (2026-09-09):** v1 (Solar System) and Phase 2 stages A–F (Milky Way) are built,
-verified and pushed. Stage G (polish: device QA, performance, visual/UI polish, CI) is **on hold until the
-owner approves** after reviewing A–F. Do not start it unprompted; see `docs/STATUS.md` for its scope.
+**Where things stand (2026-09-20):** v1 (Solar System) and Phase 2 stages A–F (Milky Way) are built, verified and
+pushed. Stage G began on the owner's approval with the **performance** items (galaxy model in a worker, exoplanets
+fetched after boot, events worker split from the catalogue) — done and measured. The rest of Stage G (device QA,
+visual and UI polish, docs/CI) is still open: see `docs/STATUS.md` and confirm with the owner before starting a part.
 
 ## Stack
 
@@ -37,6 +38,7 @@ npm run data:build     # rebuild public/data from Horizons / SBDB / HYG+AT-HYG /
 npm run data:textures  # download planet textures + Milky Way
 python3 scripts/process-moon-maps.py <dir> [names]   # moon map sheets -> public/textures/moons
 node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=js]   # headless screenshot (any installed Chromium browser)
+node scripts/dev/boot-profile.mjs      # boot cost: long tasks, galaxy generation, catalogue sizes
 npm run check          # all five Phase 2 check scripts (stars, exoplanets, deep sky, compact objects, galaxy); no network
 npm run data:deepsky-images [id…]     # licence-checked Commons photos for nebulae (slow); then data:build -- --only=deepsky
 ```
@@ -67,7 +69,10 @@ npm run data:deepsky-images [id…]     # licence-checked Commons photos for neb
 12. **Two scenes.** Solar System bodies, stars, exoplanets and compact objects live in the main scene (km). Deep-sky
     cards, the galaxy model and regions live in `Universe.farScene` (unit `FAR_UNIT_KM` = 1e9 km), rendered first
     with `farCamera` and depth-cleared. Never put a world-sized quad at > 1e14 km in the main scene.
-13. **Bodies from data are registered at boot** (`registerBodies` in `App.boot`): exoplanet systems and their hosts
+13. **Not everything loads at boot.** The exoplanet catalogue arrives after the first frames
+    (`Ephemeris.loadExoplanets`, then `registerBodies` + `TopBar.setBodies` + `retypeExoplanetHosts`), and the galaxy
+    model's points come from `galaxy.worker.ts`. Anything depending on either must tolerate it not being there yet.
+14. **Bodies from data are registered at boot** (`registerBodies` in `App.boot`): exoplanet systems and their hosts
     (lazy: `Universe.ensure(id)` before focusing), deep-sky objects, compact objects, regions. `BODY_MAP` is the
     lookup; `BODIES` grows to ~11,000 entries, so never iterate it per frame.
 
@@ -89,5 +94,8 @@ npm run data:deepsky-images [id…]     # licence-checked Commons photos for neb
 - Gaia archive data is CC BY-NC; take star data only from HYG / AT-HYG (CC BY-SA 4.0).
 - Exoplanet systems are `lazy` bodies: call `universe.ensure(id)` before focusing or selecting one. Exoplanet meshes
   live on `EXO_LAYER` so the Sun's light never reaches them; their host's light does.
+- The data pipeline caches its downloads in `node_modules/.cache` and **never expires them**: `--only=stars` will
+  happily rebuild from a months-old Exoplanet Archive snapshot. Delete `pscomppars.csv` to actually refresh.
+- `window.app` is a `<div id="app">` until `main.ts` replaces it; dev scripts must wait for `window.app?.universe`.
 - Horizons: `REF_PLANE='B'` (body equator), CSV output, `TLIST` for single instants; spacecraft span errors
   say "prior to A.D. …" / "after A.D. …" and the pipeline clamps on them automatically.
