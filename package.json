@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Real-time, high-fidelity 3D solar system in the browser.",
+  "description": "Real-time, high-fidelity 3D map of the Solar System and the Milky Way in the browser.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,7 +12,8 @@
     "data:build": "tsx scripts/build-data.ts",
     "data:textures": "bash scripts/fetch-textures.sh",
     "test": "tsx scripts/verify-ephemeris.ts",
-    "data:deepsky-images": "tsx scripts/fetch-deepsky-images.ts && python3 scripts/compress-deepsky.py"
+    "data:deepsky-images": "tsx scripts/fetch-deepsky-images.ts && python3 scripts/compress-deepsky.py",
+    "check": "for s in stars exoplanets deepsky compact galaxy; do npx tsx scripts/dev/$s-check.ts || exit 1; done"
   },
   "dependencies": {
     "astronomy-engine": "^2.1.19",

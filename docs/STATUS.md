@@ -1,6 +1,10 @@
-# Status — first build (2026-09-02)
+# Status
 
-## Delivered in v1
+## v1 — Solar System (2026-09-02)
+
+*The v1 notes below are kept as written; Phase 2 follows.*
+
+### Delivered in v1
 
 - ~80 bodies: Sun, 8 planets, 23 moons, 9 dwarf planets, 8 asteroids, 10 comets, 2 interstellar objects,
   9 deep-space probes, ISS, Hubble. See `src/data/catalog.ts` for the exact list and facts.
@@ -18,7 +22,7 @@
 - Production build: 194 KB gzipped JS + 97 KB worker; site ≈ 93 MB with textures.
 - Repo: https://github.com/UniversalTheory/universe-explorer (public, `main`). Not deployed.
 
-## Known issues and limitations
+### Known issues and limitations (v1)
 
 1. **Data freshness**: ISS/Hubble TLEs stale within weeks; spacecraft spans end 2029 (Psyche, Parker),
    2031 (JWST), 2034 (Europa Clipper), 2050–2070 (others); moon fits best 2016–2036; SBDB elements are
@@ -39,7 +43,7 @@
 11. The Moon's phase-dependent brightness and Earthshine are not modelled.
 12. Uranus/Neptune moon textures unavailable in the public domain at usable resolution (only partial Voyager coverage).
 
-## Backlog (suggested priority)
+### v1 backlog (still open unless noted)
 
 **Near term**
 - Real-device QA pass (desktop GPU, iPhone/Android): frame rate, pinch/rotate feel, 8K memory. Add a
@@ -57,46 +61,87 @@
 - Shareable views (URL encodes time + camera).
 
 **Long term (owner's vision)**
-- Zoom out: nearby stars with real distances (HYG has parallaxes), exoplanet systems, then the Milky Way
-  structure and beyond. Needs a hierarchical coordinate system (heliocentric km → parsecs) and streamed data
-  from a CDN rather than the Pages bundle.
+- ~~Zoom out: nearby stars with real distances, exoplanet systems, then the Milky Way structure~~ — delivered in
+  Phase 2 (below), inside the Pages bundle and with km kept as the unit. Beyond the Milky Way remains future work.
 
-# Phase 2 — Milky Way (started 2026-09-09)
 
-Stage progress (see `DECISIONS.md` P11–P14 for the scope):
+## Phase 2 — Milky Way (2026-09-09)
 
-| Stage | Status |
-| --- | --- |
-| A · Foundations (units hook, far plane, zoom range, scale bar, zoom ladder, unit-aware formatting, catalogue kinds) | done 2026-09-09; verified by headless screenshots at 1e13–1e18 km and `npm test` |
-| B · 3D stars (108k-star standard tier + 221k deep tier, proper motion, star spheres, 115 curated stars, star search) | done 2026-09-09; `scripts/dev/stars-check.ts` passes, screenshots at 50 ly, Sirius, Proxima |
-| C · Exoplanets (6,325 planets / 4,741 hosts from the NASA Exoplanet Archive, lazy systems, own-star lighting, transit-epoch phases, ~90 curated write-ups) | done 2026-09-09; `scripts/dev/exoplanets-check.ts` passes (transit geometry, Kepler consistency) |
-| D · Deep sky (90 nebulae / remnants / clusters from OpenNGC with curated distances; 49 licence-checked Commons photos (9.5 MB) on sky-plane cards in a far scene; cluster point clouds) | done 2026-09-09; `scripts/dev/deepsky-check.ts` passes; Orion, Crab, Horsehead, Eagle, Omega Centauri screenshots checked |
-| E · Compact objects (15 black holes, 11 neutron stars, 4 white dwarfs, S2; measured binary orbits for Sirius B, Procyon B, Alpha Cen B, S2; accretion-disc and pulsar-beam rendering) | done 2026-09-09; `scripts/dev/compact-check.ts` passes |
-| F · Galaxy model (Reid 2019 arms + disc/bulge/bar point model, panorama cross-fade, optional artwork map, heliopause / Oort cloud / Local Bubble / Gould Belt / Radcliffe Wave, arm labels, galactic time rates) | done 2026-09-09; `scripts/dev/galaxy-check.ts` passes |
-| G · Polish & docs | next |
+Scope and decisions: `DECISIONS.md` P11–P15, T20–T28. Stages A–F are built, verified and pushed (commits c97d528,
+dd61c1c, 8beb44b, 61cb099, 2300644). **Stage G (polish) is on hold until the owner has reviewed A–F.**
 
-Known issues introduced or exposed by Stage A:
-- In true-scale mode at stellar distances the stacked planet marker sprites form a white blob at the Sun's
-  position; Stage B will hide Solar System markers beyond a distance threshold.
-- The Galaxy ladder step still shows the ESO panorama sphere around a lone Sun; the 3D galaxy model and the
-  panorama cross-fade are Stage F.
-- Star spheres use the Sun's surface texture tinted by colour; hot stars therefore show Sun-like granulation.
-  Sirius B, Procyon B, Alpha Centauri's binary motion and other companions wait for the binary-orbit machinery
-  of Stages C/E. Alpha Centauri A and B are placed at HYG's identical distance, so their true separation is not shown.
-- 204 naked-eye stars have no usable parallax in HYG; they sit at 1,000 pc and the info panel says so.
-- Exoplanet orbit orientation on the sky (node) is unmeasured for nearly all systems and drawn at 0°; non-transiting
-  planets without a periastron epoch have an arbitrary phase (both flagged in the panel). Circumbinary planets orbit the
-  archive's single host position. Planet radii come from mass when unmeasured. 28 hosts (35 planets) lack a distance
-  and are omitted. `exoplanets.json` is 0.7 MB (gzips to ~0.15 MB on Pages).
-- Deep-sky photos are flat cards in the plane of the sky: correct from the Sun's direction, thinning to a glow
-  off-axis; their orientation is as published on Commons (not necessarily north-up) and the catalogued position angle
-  is not applied. Cluster point clouds are statistical (Plummer profile), not the real members. Distances are
-  literature values rounded to two or three figures. Kepler's SNR has no acceptable Commons photo yet (drawn as a glow);
-  the Heart and Soul share one wide-field photo; a few pictures are infrared or composite (Trifid, Pacman, Southern Ring).
-- X-ray binaries and the Gaia black holes are drawn with unmeasured node angles and phases (flagged); 40 Eri B and
-  Stein 2051 B have approximate orbits. Pulsar beams turn no faster than once per 0.35 s for display. Black-hole lensing
-  of background stars is not rendered (only the photon ring and disc).
-- The galaxy model is a statistical model: no real dust extinction, the warp and bar are schematic, and the artwork map
-  plane's scale/orientation are approximate. Regions are simple shells and curves. At galactic time rates the Solar
-  System is hidden rather than propagated.
+### Delivered (Stages A–F)
 
+| Stage | What exists | Verification |
+| --- | --- | --- |
+| A · Foundations | km kept as the world unit with `WORLD_UNIT_KM` as the future hook; far plane 1e19 km, camera cap 2e18 km, distance-scaled wheel zoom; zoom ladder (Solar System / Stars / Galaxy, keys 1–3); scale bar with km → AU → ly → pc → kpc; light-year formatting; orbit lines hidden when sub-pixel; point-sprite Sun glow at stellar distances; catalogue kinds for the later stages | screenshots 1e13–1e18 km, `npm test` |
+| B · Stars | 108k stars (HYG v4.1) in 3D with proper motion + radial velocity, 221k-star deep tier (AT-HYG) on demand, magnitude-from-camera sizing, star spheres coloured by spectral type handing over to points, 116 curated stars with facts and aliases, star rows in the info panel, panorama fade with distance | `scripts/dev/stars-check.ts` |
+| C · Exoplanets | 6,325 planets / 4,741 hosts (NASA Exoplanet Archive) on Kepler orbits in the sky frame with real phases from transit / periastron epochs, next-transit dates, lazy systems, own-star lighting on a render layer, procedural skins by class, ~90 curated write-ups, ranked search | `scripts/dev/exoplanets-check.ts` |
+| D · Deep sky | 90 nebulae / remnants / planetary nebulae / dark clouds / clusters (OpenNGC + curated distances), 49 licence-checked Commons photographs (9.5 MB) on additive sky-plane cards in a far scene (unit 1e9 km), Plummer point clouds for clusters, per-object credits | `scripts/dev/deepsky-check.ts` |
+| E · Compact objects | 15 black holes, 11 neutron stars, 4 white dwarfs, S2; binary-orbit ephemeris (Sirius B, Procyon B, Alpha Cen B bound to A, S2 around Sgr A*; X-ray binaries with flagged unknowns); black-hole shadow / photon ring / accretion disc, pulsar beams | `scripts/dev/compact-check.ts` |
+| F · Galaxy | ~300k-point disc / bulge / bar / arm model from Reid et al. 2019 (verified against the published table) in the far scene, cross-fade with the panorama, optional artwork map plane, schematic regions (heliopause, Oort cloud, Local Interstellar Cloud, Local Bubble, Gould Belt, Radcliffe Wave) and arm labels, galactic time rates with the Solar System hidden | `scripts/dev/galaxy-check.ts` |
+
+Numbers: site ≈ 116 MB built (data 15 MB, textures 96 MB); main bundle 780 KB (230 KB gzipped) + 141 KB worker;
+boot fetches ephemeris.json, stars.bin (4.5 MB), exoplanets.json/.bin (1.1 MB), deepsky.json; the deep star tier
+(8.8 MB), nebula photos and the galaxy map load on demand. `npm run check` runs all five check scripts; `npm test`
+still compares the Solar System against Horizons.
+
+### Known issues and limitations (Phase 2)
+
+Honesty flags shown in the app are listed here so nobody mistakes a model for a measurement.
+
+1. **Stars**: 204 naked-eye stars have no usable parallax in HYG and sit at 1,000 pc (flagged in the panel). Star
+   spheres reuse the Sun's surface pattern, recoloured. Proper motion is linear (no Galactic acceleration), fine
+   to ±100,000 years. Labels for uncatalogued companions use a luminosity estimate.
+2. **Exoplanets**: the node angle on the sky is unmeasured for nearly all systems and drawn at 0°; non-transiting
+   planets without a periastron epoch get an arbitrary phase (both flagged). Circumbinary planets orbit the archive's
+   single host position; radii come from mass where unmeasured; 28 hosts (35 planets) without a distance are omitted.
+   Hosts are lit by one point light (the active system only).
+3. **Deep sky**: photographs are flat cards in the plane of the sky, thinning to a glow off-axis; orientation is as
+   published (not rotated to the position angle). Kepler's SNR has no acceptable photo (drawn as a glow); the Heart and
+   Soul share a wide-field photo; Trifid, Pacman and the Southern Ring use infrared / composite images. Cluster clouds
+   are statistical. Distances are literature values rounded to 2–3 figures.
+4. **Compact objects**: X-ray binaries and the Gaia black holes have unmeasured node/phase (flagged); 40 Eri B and
+   Stein 2051 B have approximate orbits; pulsar beams are slowed to one turn per 0.35 s; no gravitational lensing of
+   background stars; minimum pixel sizes for compact objects apply only within 300 ly.
+5. **Galaxy**: a statistical model with no dust extinction; the arms are extrapolated beyond the measured azimuths
+   (dimmer); the bar, warp and bulge are schematic; the artwork map's scale and orientation are approximate; regions
+   are simple shells and curves; at galactic time rates the Solar System is hidden rather than propagated. The bulge is
+   still bright at the Galaxy zoom level.
+6. **Rendering**: two SwiftShader failure modes were found and worked around (world-sized quads beyond ~1e14 km
+   rasterise as bow-ties / flat fills; hence point-sprite glows and the far scene). Real-GPU behaviour is unverified.
+7. **Performance (unmeasured on devices)**: the galaxy model (300k points) and star cloud (108k, +221k) are built at
+   boot on the main thread; the events worker bundle grew to 141 KB because it imports the catalogue.
+8. **UI**: labels can overlap panels and each other in dense views (arm labels near the bulge, cluster labels through
+   foreground spheres); search shows up to 12 results without grouping; the time bar has no year-only display for
+   dates far from now; deep-sky and exoplanet layers have no loading indicator.
+
+### Stage G — polish (pending owner approval)
+
+Proposed scope, to be confirmed by the owner before work starts:
+
+- **Real-device QA**: desktop GPU, iPhone and Android: frame rate at each ladder step, pinch/rotate feel, memory with 8K
+  planet textures plus the galaxy and star clouds. Decide the low-quality tier (already: halved galaxy/cluster points,
+  deep tier off): add 2K-texture cap and optional galaxy-off on low-end devices.
+- **Performance**: move galaxy-model generation off the boot path (worker or first zoom-out); lazy-fetch
+  `exoplanets.json` on first use; keep the events worker free of the star/exoplanet catalogues (split `catalog.ts`).
+- **Visual polish**: tame the bulge; dust lanes; better hot-star surfaces; apply position angles to nebula cards
+  where the photo is north-up; replace the infrared / composite / missing nebula photos; label occlusion by
+  foreground spheres; arm-label placement.
+- **UI**: group search results by kind; loading indicators for on-demand layers; year display and a "jump to
+  event" for S2's 2034 periastron, Alpha Cen B's 2035 periastron, Sirius B's 2044 periastron; a credits page listing
+  every photograph.
+- **Docs and tooling**: this file, README, ARCHITECTURE, DECISIONS, CLAUDE.md final pass; `npm run check` in a GitHub
+  Actions workflow (typecheck + checks; `npm test` needs network); data-refresh cadence (stars/exoplanets monthly,
+  TLEs weekly).
+- **Deploy**: GitHub Pages workflow remains deferred by the owner (P7).
+
+### Backlog beyond Phase 2
+
+- Observer mode (sky from a location, rise/set, local eclipses) — from v1.
+- Serverless proxy for live TLEs / Horizons — owner-approved future item (P4).
+- More Solar System moons and named asteroids; real moon maps where free sources appear.
+- Beyond the Milky Way: Magellanic Clouds, Andromeda, the Local Group and the large-scale structure. Needs the
+  `WORLD_UNIT_KM` tier switch (positions beyond ~1e19 km overflow float32 lengths) and streamed data from a CDN.
+- Lensing shader for black holes; volumetric nebulae for a handful of well-mapped objects; dust extinction in the
+  galaxy model; the Sun's orbit around the Galaxy at galactic rates.

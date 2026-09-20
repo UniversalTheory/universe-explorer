@@ -6,7 +6,9 @@
 Clock (ms, rate, live) ─► SimTime {ms, tt, jd, astro}
         │
         ▼
-Universe.computePositions(t)  ─► Ephemeris.state(id, t) for every body (heliocentric ECL km, double)
+Universe.computePositions(t)  ─► Ephemeris.state(id, t) for every *instantiated* body (heliocentric ECL km, double):
+                                 Solar System, catalogued stars, ensured exoplanet systems, compact objects,
+                                 deep-sky objects and regions (fixed). The star cloud reads StarCatalog directly.
         │
         ▼
 origin = helio(focus)  (blended between old/new focus during a fly-to)
@@ -21,7 +23,8 @@ Universe.update(...)  ─► world positions = helio - origin (Three axes)
                           screen projection for labels/picking
         │
         ▼
-Labels.update(...)  (DOM)  ─►  render: Starfield scene (rotation only) then main scene
+Labels.update(...)  (DOM)  ─►  render: Starfield scene (rotation only) → farScene (deep sky, galaxy,
+                                          regions; unit 1e9 km; depth cleared after) → main scene
         │
         ▼
 UI at low rate: TimeBar.render() each frame; info stats 4 Hz; events panel + EventService 1 Hz

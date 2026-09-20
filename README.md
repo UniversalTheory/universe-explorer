@@ -1,8 +1,11 @@
 # Universe Explorer
 
-A real-time, high-fidelity 3D map of the Solar System in the browser. Every planet, major moon,
-dwarf planet, comet and spacecraft is placed where it actually is right now, spinning with the
-correct pole and rotation phase, with upcoming eclipses, conjunctions and alignments computed live.
+A real-time, high-fidelity 3D map of the Solar System and the Milky Way in the browser. Every planet,
+major moon, dwarf planet, comet and spacecraft is placed where it actually is right now, spinning with
+the correct pole and rotation phase, with upcoming eclipses, conjunctions and alignments computed live.
+Zoom out and the same rule holds: 108,000 stars at their measured distances moving with their proper
+motions, every confirmed exoplanet on its orbit, nebulae and clusters at their true sizes, black holes
+with their companions, and a model of the whole Galaxy that says where it is a model.
 
 Fully static, no backend, free data only. Runs on desktop and mobile.
 
@@ -17,7 +20,7 @@ npm run build        # static site in dist/ (deploy anywhere: GitHub Pages, Netl
 The app makes no network calls at runtime beyond loading its own files, so it works offline after
 the first load.
 
-## What's in this first build
+## What's in the Solar System (v1)
 
 **Bodies (≈80)**
 - The Sun with an animated photosphere and corona glow.
@@ -33,8 +36,36 @@ the first load.
 - Spacecraft: Voyager 1 and 2, Pioneer 10 and 11, New Horizons, JWST, Parker Solar Probe, Europa
   Clipper, Psyche, plus the ISS and Hubble around Earth.
 - Asteroid belt, Jupiter-region and Kuiper belt / scattered disc as 15,000 Keplerian particles
-  propagated on the GPU, and 108,000 real stars in 3D at their measured distances (330,000 with the on-demand deep tier), moving with their proper motions, every confirmed exoplanet (6,300+, NASA Exoplanet Archive) on Keplerian orbits with real transit phases, 90 nebulae, supernova remnants and star clusters at their true distances and sizes, black holes, pulsars and white dwarfs with their companions on measured binary orbits (S2 around Sagittarius A*, Sirius B, Alpha Centauri), and a model of the whole Galaxy built from the Reid et al. 2019 spiral-arm fits, over the ESO Milky Way panorama in
-  correct galactic orientation.
+  propagated on the GPU, over the ESO Milky Way panorama in correct galactic orientation.
+
+## What's in the Milky Way (Phase 2)
+
+Press `1`, `2`, `3` for the Solar System, the 50-light-year neighbourhood and the Galaxy; the scale bar in
+the corner switches from kilometres to AU, light-years, parsecs and kiloparsecs as you go.
+
+- **Stars**: 108,000 stars (HYG v4.1) at their Gaia-era distances, moving with their proper motions and
+  radial velocities as the clock runs, plus a 221,000-star deep tier (AT-HYG) fetched when you leave the
+  Solar System. 116 curated stars have descriptions, aliases and physical data; fly to one and it becomes a
+  sphere coloured by its spectral type. Barnard's Star closes to 3.75 light-years around AD 11,740.
+- **Exoplanets**: all 6,300+ confirmed planets from the NASA Exoplanet Archive, on Keplerian orbits about
+  their hosts with real phases where the archive has a transit or periastron epoch, so the panel can say
+  when TRAPPIST-1 e next transits. Planets are lit by their own star and skinned by class (lava world,
+  temperate rocky, super-Earth, mini-Neptune, hot Jupiter…). ~90 famous systems have hand-written text.
+  What is unmeasured (the node angle on the sky, some phases) is flagged in the panel.
+- **Nebulae and clusters**: 90 objects from OpenNGC at curated distances: emission and reflection nebulae,
+  supernova remnants, planetary nebulae, dark clouds, open and globular clusters. Nebulae are licence-checked
+  Wikimedia Commons photographs on cards in the plane of the sky, scaled to the object's real size and
+  credited in the panel; clusters are 3D point clouds sized to the real radius.
+- **Compact objects**: 15 black holes (Sagittarius A*, Cygnus X-1, V404 Cygni, the Gaia black holes…), 11
+  neutron stars and pulsars, 4 white dwarfs. Sirius B, Procyon B, Alpha Centauri B and the star S2 move on
+  their measured binary orbits; X-ray binaries orbit with their published periods. Black holes show a shadow,
+  photon ring and accretion disc; pulsars sweep their beams.
+- **The Galaxy**: a 300,000-point model of the disc, bulge, bar and the spiral arms fitted by Reid et al.
+  2019 to maser parallaxes, aligned so Sgr A*, the nebulae and the clusters land in the right arms, fading
+  in as the ESO panorama fades out. An optional artist's-impression map plane can be switched on. The
+  heliopause, Oort cloud, Local Bubble, Gould Belt and Radcliffe Wave are drawn as labelled schematic shapes.
+- **Time at galactic scale**: speeds of 100, 1,000 and 100,000 years per second show stars drifting and
+  S2 lapping Sgr A*; the Solar System is hidden at those rates because its ephemerides do not reach that far.
 
 **Physics and fidelity**
 - Positions in J2000 ecliptic coordinates from JPL Horizons, JPL SBDB and astronomy-engine, with a
@@ -49,8 +80,8 @@ the first load.
 
 **Time**
 - Opens at the real current moment and tracks it live.
-- Play, pause, speed presets from real time to 10 years per second, in both directions, and a
-  date/time picker. One tap returns to now.
+- Play, pause, speed presets from real time to 100,000 years per second, in both directions, and a
+  date/time picker. One tap returns to now. Above 20 years per second the Solar System is hidden.
 
 **Events** (computed in a Web Worker for the next three years from the simulation time)
 - Moon phases and supermoons, lunar and solar eclipses (with the location of greatest eclipse),
@@ -65,18 +96,23 @@ the first load.
   speed, phase, eclipse status, physical data, discovery), events panel, and display settings.
 - Drag to orbit, scroll or pinch to zoom, click to select, double-click or "Fly to" to travel.
   Fly-to arrives on the sunlit side. Keyboard: `Space` play/pause, `[` `]` slower/faster, `N` now,
-  `E` events, `S` settings, `/` search, `F` fly to selection, `Esc` close.
+  `E` events, `S` settings, `/` search, `F` fly to selection, `1` `2` `3` zoom ladder, `Esc` close.
+- Search covers planets, moons, spacecraft, 116 named stars, every exoplanet and host, all deep-sky objects
+  (by common name or M / NGC / Caldwell number), compact objects, and Galaxy regions and arms.
 - Mobile layout with bottom sheets that keep the focused body in view.
 
 ## Refresh the data
 
 ```bash
-npm run data:textures   # free textures (Solar System Scope CC BY 4.0, ESO Milky Way CC BY 4.0)
-npm run data:build      # JPL Horizons / SBDB / HYG / Celestrak -> public/data
-npm test                # compares the runtime ephemeris against JPL Horizons
+npm run data:textures        # free textures (Solar System Scope, ESO panorama and galaxy map; all CC BY 4.0)
+npm run data:build           # Horizons / SBDB / HYG + AT-HYG / Exoplanet Archive / OpenNGC / Celestrak -> public/data
+npm run data:deepsky-images  # licence-checked Commons photographs for the deep-sky list (slow)
+npm test                     # compares the Solar System ephemeris against JPL Horizons
+npm run check                # star, exoplanet, deep-sky, compact-object and galaxy checks (no network)
 ```
 
-`data:build` accepts `-- --only=moons,smallbodies,spacecraft,stars,tle` to refresh one stage.
+`data:build` accepts `-- --only=moons,smallbodies,spacecraft,stars,exoplanets,deepsky,tle` to refresh one
+stage (stars and exoplanets build together).
 Re-run it every few months: the ISS/Hubble orbits go stale within weeks, spacecraft trajectories
 end between 2029 and 2070 depending on the mission, and the fitted moon elements are best within
 ±10 years of 2026. Moon maps are produced from public-domain sources by
@@ -92,22 +128,28 @@ end between 2029 and 2070 depending on the mission, and the fitted moon elements
 | Voyager 1/2, Pioneer 10/11, New Horizons, JWST, Parker Solar Probe, Europa Clipper, Psyche | JPL Horizons state vectors, cubic Hermite interpolation | exact to the sample spacing |
 | ISS, Hubble | Bundled TLE + SGP4 (`satellite.js`) | good for a few weeks after the TLE epoch |
 | Rotation & poles | IAU WGCCRE 2009/2015 models (`src/ephemeris/iau.ts`) | Earth sub-solar point verified to 0.01° |
+| Stars | HYG v4.1 / AT-HYG v4.0 positions, distances and space velocities; linear motion in time (`src/ephemeris/stars.ts`) | Gaia DR3 parallaxes: ~1% nearby, tens of % at 1–2 kpc; motion valid ±10⁵ yr |
+| Exoplanets | NASA Exoplanet Archive composite parameters; Kepler orbit in the sky frame, phase from transit / periastron epochs (`src/ephemeris/exoplanets.ts`) | period, size and phase as published; node angle unmeasured |
+| Binary companions (Sirius B, S2…) | Visual-binary elements from the literature (`src/ephemeris/binary.ts`) | Sirius B separation and S2's 2018 periastron reproduced |
+| Nebulae, clusters, regions | Fixed positions from OpenNGC / curated distances; the Galaxy from Reid et al. 2019 arm fits | positions real; shapes are models, labelled |
 
 ## Project layout
 
 ```
-scripts/build-data.ts         data pipeline (Horizons, SBDB, HYG, Celestrak)
+scripts/build-data.ts         data pipeline (Horizons, SBDB, HYG + AT-HYG, Exoplanet Archive, Celestrak)
+scripts/deepsky.ts            deep-sky list, OpenNGC parsing, licence-checked Commons image fetch
 scripts/verify-ephemeris.ts   accuracy checks against Horizons (npm test)
 scripts/process-moon-maps.py  public-domain moon map sheets -> 2K textures
-scripts/dev/                  headless screenshot / geometry check helpers
-src/core                      math, time scales, clock, settings
-src/ephemeris                 frames, Kepler, IAU rotation, moons, small bodies, spacecraft, TLE
+scripts/compress-deepsky.py   re-encodes deep-sky photos to ≤ 1024 px JPEG
+scripts/dev/                  headless screenshot helper and the *-check.ts verification scripts
+src/core                      math, time scales, clock (incl. galactic rates), settings
+src/ephemeris                 frames, Kepler, IAU rotation, moons, small bodies, spacecraft, TLE, stars, exoplanets, binaries, deep sky
 src/events                    event computation (Web Worker)
-src/render                    Three.js scene: bodies, Sun, rings, atmospheres, comets, belts, stars, camera
-src/ui                        glass UI: top bar, time bar, info / events / settings panels
-src/data/catalog.ts           physical data, descriptions, textures for every body
-public/data                   baked ephemeris (generated)
-public/textures               textures (generated / processed)
+src/render                    Three.js scene: bodies, Sun/stars, star cloud, exoplanets, deep-sky cards, black holes, galaxy model, regions, camera
+src/ui                        glass UI: top bar + zoom ladder, time bar, scale bar, info / events / settings panels
+src/data/                     catalog.ts (Solar System), stars.ts, exoplanets.ts, deepsky.ts, compact.ts, galaxy.ts
+public/data                   baked data: ephemeris.json, stars(.bin, -deep.bin), exoplanets(.json, .bin), deepsky.json (generated)
+public/textures               textures (generated / processed), deepsky/ photographs
 ```
 
 ## Documentation
@@ -117,12 +159,16 @@ frames, ephemeris, rendering and event engine; `docs/DECISIONS.md` records every
 `docs/STATUS.md` lists what exists, known issues and the backlog; `docs/DEV-WORKFLOW.md` covers testing,
 data refresh and how to add bodies or textures.
 
-## Roadmap
+## Status and roadmap
+
+Phase 2 (the Milky Way) stages A–F are complete; the polish pass (Stage G: device QA, performance, visual and
+UI polish, CI) waits for the owner's review. See `docs/STATUS.md` for the full list of what exists, the
+honesty flags, and the backlog. After that:
 
 - Serverless proxy for live JPL Horizons data (fresh TLEs, more small bodies on demand)
 - More moons and small bodies; real maps for the moons that still use procedural textures
 - Observer mode: the sky from your location, with local eclipse visibility
-- Zoom out beyond the Solar System: nearby stars at real distances, then the Milky Way and beyond
+- Beyond the Milky Way: the Magellanic Clouds, Andromeda, the Local Group and the large-scale structure
 
 ## Credits
 

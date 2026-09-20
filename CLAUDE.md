@@ -4,16 +4,22 @@ Read this first. Deeper material lives in `docs/`:
 
 - `docs/ARCHITECTURE.md` — how the app is put together (frames, ephemeris, rendering, shaders, events, data pipeline)
 - `docs/DECISIONS.md` — every product and technical decision made so far, with the reasoning
-- `docs/STATUS.md` — what exists in v1, verification results, known issues, prioritised backlog
+- `docs/STATUS.md` — what exists (v1 Solar System, Phase 2 Milky Way stages A–F), verification, known issues, Stage G scope, backlog
 - `docs/DEV-WORKFLOW.md` — how to run, test, screenshot headlessly, refresh data, add a body or texture
 
 ## The project in one paragraph
 
-A real-time, high-fidelity 3D map of the Solar System in the browser (later: the galaxy and beyond).
+A real-time, high-fidelity 3D map of the Solar System and the Milky Way in the browser (later: beyond).
 Every body is placed where it really is at the simulation time, spinning with its true pole and
 rotation phase; eclipses and shadows are computed physically; upcoming sky events are predicted.
+Stars move with their proper motions, exoplanets and binary companions orbit with real phases where
+measured, nebulae sit at their true sizes, and the Galaxy's shape is a model that says so.
 Fully static site, no backend, free data and assets only, desktop + mobile, minimal "glass" UI.
 Owner: the user (GitHub `UniversalTheory`). Repo: https://github.com/UniversalTheory/universe-explorer
+
+**Where things stand (2026-09-09):** v1 (Solar System) and Phase 2 stages A–F (Milky Way) are built,
+verified and pushed. Stage G (polish: device QA, performance, visual/UI polish, CI) is **on hold until the
+owner approves** after reviewing A–F. Do not start it unprompted; see `docs/STATUS.md` for its scope.
 
 ## Stack
 
@@ -31,8 +37,7 @@ npm run data:build     # rebuild public/data from Horizons / SBDB / HYG+AT-HYG /
 npm run data:textures  # download planet textures + Milky Way
 python3 scripts/process-moon-maps.py <dir> [names]   # moon map sheets -> public/textures/moons
 node scripts/dev/snap.mjs out.png --hash=earth --wait=18000 [--mobile] [--eval=js]   # headless screenshot (any installed Chromium browser)
-npx tsx scripts/dev/stars-check.ts   # star catalogue sanity checks (distances, proper motion)
-npx tsx scripts/dev/exoplanets-check.ts   # exoplanet transit geometry and Kepler checks
+npm run check          # all five Phase 2 check scripts (stars, exoplanets, deep sky, compact objects, galaxy); no network
 npm run data:deepsky-images [id…]     # licence-checked Commons photos for nebulae (slow); then data:build -- --only=deepsky
 ```
 
@@ -51,11 +56,20 @@ npm run data:deepsky-images [id…]     # licence-checked Commons photos for neb
    are `helio - origin`. Keep double precision (plain number tuples) until the final subtraction.
 5. **Ephemeris code must stay DOM-free** (it runs in Node for tests and in the events Web Worker).
 6. `public/data` and `public/textures` are generated. Do not hand-edit; change the scripts.
-7. Keep `npm test`, `scripts/dev/stars-check.ts`, `scripts/dev/exoplanets-check.ts`, `scripts/dev/deepsky-check.ts`, `scripts/dev/compact-check.ts` and `scripts/dev/galaxy-check.ts` passing after any change under `src/ephemeris` or `scripts/build-data.ts`.
+7. Keep `npm test` and `npm run check` passing after any change under `src/ephemeris`, `src/data` or `scripts/`.
 8. Free/open assets only (public domain, CC BY, CC BY-SA, MIT). Credit new sources in README + settings panel.
 9. Product scope decisions are the user's: static-only for now, scale toggle, time scrubber (see
    `docs/DECISIONS.md`). Do not add a backend or paid service unprompted.
 10. Commit only when the user asks. Do not deploy to GitHub Pages yet (the user said to hold off).
+11. **Models are declared.** Anything that is not a measurement (galaxy shape, extrapolated arms, region shells,
+    unmeasured orbit nodes/phases, statistical cluster clouds, placeholder star distances) is flagged in the info
+    panel and in `docs/STATUS.md`. Keep it that way when adding content.
+12. **Two scenes.** Solar System bodies, stars, exoplanets and compact objects live in the main scene (km). Deep-sky
+    cards, the galaxy model and regions live in `Universe.farScene` (unit `FAR_UNIT_KM` = 1e9 km), rendered first
+    with `farCamera` and depth-cleared. Never put a world-sized quad at > 1e14 km in the main scene.
+13. **Bodies from data are registered at boot** (`registerBodies` in `App.boot`): exoplanet systems and their hosts
+    (lazy: `Universe.ensure(id)` before focusing), deep-sky objects, compact objects, regions. `BODY_MAP` is the
+    lookup; `BODIES` grows to ~11,000 entries, so never iterate it per frame.
 
 ## Gotchas that cost time before
 

@@ -40,6 +40,7 @@ npx tsx scripts/dev/exoplanets-check.ts      # exoplanet transit geometry, Keple
 npx tsx scripts/dev/deepsky-check.ts         # deep-sky positions, Orion apparent size, image licences
 npx tsx scripts/dev/compact-check.ts         # binary orbits: Sirius B, S2 periastron, Alpha Cen B
 npx tsx scripts/dev/galaxy-check.ts          # arm distances along the Sun–centre line, model centre vs Sgr A*, frame orientation
+npm run check                                # all five of the above in sequence
 ```
 
 ## Data refresh
