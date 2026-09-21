@@ -140,16 +140,16 @@ Performance is done (above). Still open:
 - **Real-device QA**: desktop GPU, iPhone and Android: frame rate at each ladder step, pinch/rotate feel, memory with 8K
   planet textures plus the galaxy and star clouds. Decide the low-quality tier (already: halved galaxy/cluster points,
   deep tier off): add 2K-texture cap and optional galaxy-off on low-end devices.
-- ~~**Performance**~~ — done 2026-09-20, see the table above.
 - **Visual polish**: tame the bulge; dust lanes; better hot-star surfaces; apply position angles to nebula cards
   where the photo is north-up; replace the infrared / composite / missing nebula photos; label occlusion by
   foreground spheres; arm-label placement.
 - **UI**: group search results by kind; loading indicators for on-demand layers; year display and a "jump to
   event" for S2's 2034 periastron, Alpha Cen B's 2035 periastron, Sirius B's 2044 periastron; a credits page listing
   every photograph.
-- **Docs and tooling**: this file, README, ARCHITECTURE, DECISIONS, CLAUDE.md final pass; `npm run check` in a GitHub
-  Actions workflow (typecheck + checks; `npm test` needs network); data-refresh cadence (stars/exoplanets monthly,
-  TLEs weekly).
+- **Docs and tooling**: the prose pass through this file, README, ARCHITECTURE, DECISIONS and CLAUDE.md is done
+  (2026-09-20). Left: `npm run check` in a GitHub Actions workflow (typecheck + checks; `npm test` needs network), and
+  a data-refresh cadence (stars/exoplanets monthly, TLEs weekly) — the pipeline's download cache never expires, so a
+  refresh job has to clear `node_modules/.cache` to fetch anything new.
 - **Deploy**: GitHub Pages workflow remains deferred by the owner (P7).
 
 ### Backlog beyond Phase 2
